@@ -81,6 +81,7 @@ def find_csvs(root):
     files = glob.glob(os.path.join(root, '**', '*.csv'), recursive=True) + \
         glob.glob(os.path.join(root, '**', '*.csv.gz'), recursive=True)
     return sorted(f for f in files if SPOTTER_ID in os.path.basename(f)
+                  and 'smartmooring' not in os.path.basename(f).lower()      # sensor files are read by sensors.py
                   and 'cache' not in f.replace('\\', '/').split('/')[-2])
 
 

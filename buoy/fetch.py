@@ -60,12 +60,17 @@ def epoch(x):
 
 
 class Sofar:
+    OPTIONAL = ['processingSources', 'limit']   # dropped automatically if Sofar rejects them
+
     def __init__(self, token):
         self.s = requests.Session()
         self.s.headers['token'] = token
         self.calls = 0
+        self.dropped = set()
+        self.errors = []
 
     def get(self, path, **params):
+        params = {k: v for k, v in params.items() if k not in self.dropped}
         for attempt in range(6):
             try:
                 r = self.s.get(f'{API}/{path}', params=params, timeout=90)
@@ -75,23 +80,41 @@ class Sofar:
                 time.sleep(wait)
                 continue
             self.calls += 1
+            body = (r.text or '')[:400].replace('\n', ' ')
             if r.status_code in (401, 403):
-                raise SystemExit(f'❌ Sofar refused the API token (HTTP {r.status_code}) for {path}. '
-                                 f'Check the SOFAR_API_TOKEN secret and that this account can see {bc.SPOTTER_ID}.')
+                msg = (f'Sofar refused the API token (HTTP {r.status_code}) for /{path}: {body} — check the SOFAR_API_TOKEN '
+                       f'secret and that this account can see {bc.SPOTTER_ID}.')
+                print('❌ ' + msg)
+                print(f'::error title=Sofar token problem::{msg}')
+                raise SystemExit(1)
             if r.status_code == 429 or r.status_code >= 500:
                 wait = 10 * (attempt + 1)
                 print(f'   Sofar busy (HTTP {r.status_code}), retrying in {wait}s')
                 time.sleep(wait)
                 continue
-            r.raise_for_status()
+            if r.status_code >= 400:
+                drop = next((k for k in self.OPTIONAL if k in params), None)
+                print(f'   Sofar said HTTP {r.status_code} for /{path} {sorted(params)}: {body}')
+                if drop:
+                    print(f'   → retrying without "{drop}"')
+                    self.dropped.add(drop)
+                    params.pop(drop)
+                    continue
+                raise requests.HTTPError(f'HTTP {r.status_code} for /{path}: {body}', response=r)
+            try:
+                j = r.json()
+            except ValueError:
+                raise requests.HTTPError(f'/{path} returned something that is not JSON: {body}', response=r)
             time.sleep(0.25)  # be polite
-            return r.json()
-        raise RuntimeError(f'Sofar API kept failing for {path}')
+            return j
+        raise RuntimeError(f'Sofar API kept failing for /{path}')
 
     def paged(self, key, start, end, limit, **flags):
         """Get one array of /wave-data for [start, end). If a reply hits the `limit` cap, the window is
         split in half and each half fetched again, so nothing is missed whatever order Sofar returns."""
         start, end = ts(start), ts(end)
+        if 'limit' in self.dropped:
+            limit = 20                          # Sofar's default page size when we can't set our own
         j = self.get('wave-data', spotterId=bc.SPOTTER_ID, startDate=iso(start), endDate=iso(end),
                      limit=limit, **flags)
         items = (j.get('data') or {}).get(key) or []
@@ -145,9 +168,16 @@ def fetch_waves(api, start, end):
     """Waves + wind + partitions + surface temp, merged into one row per (time, source)."""
     common = dict(processingSources='all')
     waves = api.paged('waves', start, end, 500, includeWaves='true', **common)
-    wind = api.paged('wind', start, end, 500, includeWaves='false', includeWindData='true', **common)
-    parts = api.paged('partitionData', start, end, 500, includeWaves='false', includePartitionData='true', **common)
-    sst = api.paged('surfaceTemp', start, end, 500, includeWaves='false', includeSurfaceTempData='true', **common)
+
+    def optional(key, **flags):              # extras never block the main wave data
+        try:
+            return api.paged(key, start, end, 500, includeWaves='false', **flags, **common)
+        except requests.HTTPError as e:
+            print(f'   ({key} skipped: {e})')
+            return []
+    wind = optional('wind', includeWindData='true')
+    parts = optional('partitionData', includePartitionData='true')
+    sst = optional('surfaceTemp', includeSurfaceTempData='true')
     rows = {}
 
     def row(item):
@@ -251,26 +281,31 @@ def main():
             start = end
         print(f'   {stream:8s} → {total:6d} rows (now complete to {st[stream]})')
 
-    try:
-        walk('waves', 1, fetch_waves, lambda d: merge_daily(d, 'waves', ['Epoch Time', 'Processing Source']))
-        walk('spectra', 0.5, fetch_spectra, lambda d: merge_daily(d, 'spectra', ['Epoch Time', 'Processing Source']))
-        walk('baro', 1, fetch_baro, lambda d: merge_daily(d, 'baro', ['Epoch Time', 'Processing Source']))
+    def safe(label, fn):
         try:
-            walk('sensors', 1, fetch_sensors,
-                 lambda d: merge_daily(d, None, ['timestamp', 'sensorPosition', 'data_type_name'], 'sensors', 'sensors'))
-        except requests.HTTPError as e:
-            print(f'   sensors  → skipped ({e})')
-    except (requests.RequestException, RuntimeError) as e:
-        print(f'⚠️  Sofar is not responding properly right now ({e}). Progress is saved; the next hourly run picks up from here.')
-    try:
+            fn()
+        except (requests.RequestException, RuntimeError, KeyError, ValueError, TypeError) as e:
+            msg = f'{label}: {e}'
+            api.errors.append(msg)
+            print(f'   ⚠️  {msg}')
+            print(f'::warning title=Sofar download problem ({label})::{msg}')
+
+    safe('waves', lambda: walk('waves', 1, fetch_waves, lambda d: merge_daily(d, 'waves', ['Epoch Time', 'Processing Source'])))
+    safe('spectra', lambda: walk('spectra', 0.5, fetch_spectra, lambda d: merge_daily(d, 'spectra', ['Epoch Time', 'Processing Source'])))
+    safe('pressure', lambda: walk('baro', 1, fetch_baro, lambda d: merge_daily(d, 'baro', ['Epoch Time', 'Processing Source'])))
+    safe('sensors', lambda: walk('sensors', 1, fetch_sensors,
+                                 lambda d: merge_daily(d, None, ['timestamp', 'sensorPosition', 'data_type_name'], 'sensors', 'sensors')))
+
+    def status():
         s = fetch_status(api)
         fn = os.path.join(DATA, 'live', f'{bc.SPOTTER_ID}_status.csv')
         os.makedirs(os.path.dirname(fn), exist_ok=True)
         old = pd.read_csv(fn, dtype=str) if os.path.exists(fn) else pd.DataFrame()
         pd.concat([old, s.astype(str)]).drop_duplicates(subset=['Epoch Time'], keep='last').to_csv(fn, index=False)
         print(f"   status   → battery {s['Battery Voltage (V)'][0]} V, humidity {s['Humidity (%rel)'][0]}%")
-    except requests.HTTPError as e:
-        print(f'   status   → skipped ({e})')
+    safe('buoy status', status)
+    st['last_errors'] = api.errors[-6:]
+    st['dropped_params'] = sorted(api.dropped)
     st['last_run'] = iso(pd.Timestamp.now(tz='UTC'))
     save_state(st)
     print(f'✅ done — {api.calls} API calls')

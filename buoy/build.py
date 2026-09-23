@@ -63,13 +63,23 @@ def main():
         sh.round(4).to_csv(os.path.join(a.out, 'data', 'sensors_hourly.csv'))
         downloads.append(('⬇️ Sensors CSV', 'data/sensors_hourly.csv'))
 
+    notice = ''
+    try:
+        import json
+        with open(os.path.join(a.data, 'state.json')) as fh:
+            errs = json.load(fh).get('last_errors') or []
+        if errs:
+            notice = ('⚠️ The last hourly download from Sofar had a problem, so some data may be missing: '
+                      + ' · '.join(errs[:3]))
+    except (OSError, ValueError):
+        pass
     import plotly
     import plotly.offline
     ver = plotly.offline.get_plotlyjs_version()
     mdash.build_html(S, bd, os.path.join(a.out, 'index.html'),
                      plotly_js=plotly.offline.get_plotlyjs() if a.inline_plotly else None,
                      plotly_src=None if a.inline_plotly else f'https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{ver}/plotly.min.js',
-                     SS=SS, mode='web', downloads=downloads)
+                     SS=SS, mode='web', downloads=downloads, notice=notice)
     open(os.path.join(a.out, '.nojekyll'), 'w').close()
     st = S['stats']
     print(f"✅ site built in {time.time() - t0:.0f}s — waves {st['first']:%b %d, %Y} → {st['last']:%b %d %Y %H:%M}, "

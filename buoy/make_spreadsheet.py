@@ -456,7 +456,7 @@ def _sensor_sheets(wb, SS):
     wh.freeze_panes = 'B4'
     groups = []
     for s in SS['series']:
-        if s['group'] not in groups and s['group'] != 'cur_dir':
+        if s['group'] not in groups and s['group'] not in ('cur_dir', 'diag'):
             groups.append(s['group'])
     anchor = r + 1
     for g in groups[:6]:

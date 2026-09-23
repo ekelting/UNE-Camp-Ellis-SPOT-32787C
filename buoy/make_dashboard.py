@@ -211,7 +211,7 @@ def build_sensor_figs(SS):
             groups.append(s['group'])
     for g in groups:
         ser = [s for s in SS['series'] if s['group'] == g]
-        if g == 'cur_dir':
+        if g in ('cur_dir', 'diag'):
             continue
         emoji, name, _ = sn.GROUPS[g]
         if g == 'other':
@@ -296,7 +296,7 @@ def build_sensor_figs(SS):
     return figs, block, tiles
 
 
-def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=None, downloads=None):
+def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=None, downloads=None, notice=''):
     st, ev, lt = S['stats'], S['storms'], S['stats']['latest']
     figs = build_figs(S, bd)
     sfigs, sensor_block, stiles = build_sensor_figs(SS)
@@ -363,6 +363,8 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
         howto = ('<li>Download the newest month from the Spotter dashboard and drop the CSV into the buoy folder.</li>'
                  '<li>Double-click <b>Update Buoy Report.bat</b> in the buoy folder.</li>'
                  '<li>Hands-free: <b>Set Up Auto Update.bat</b> once with your Sofar API token.</li>')
+    if notice:
+        stale_banner += f'<div class="banner">{esc(notice)}</div>'
     dl = ''
     if downloads:
         dl = '<div class="chips" style="margin-top:12px">' + ''.join(
