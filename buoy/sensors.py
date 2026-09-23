@@ -35,6 +35,7 @@ INSTRUMENTS = [  # data-type prefix → short friendly instrument name
     (r'^bm_soft', 'temp sensor'), (r'^aanderaa', 'current meter'), (r'^bm_do', 'oxygen sensor'),
     (r'^rbr', 'RBR sensor'), (r'^bm_borealis|spl', 'hydrophone'), (r'^bm_', 'Bristlemouth sensor'),
 ]
+SETTLED_UTC = '2025-11-03T15:00:00Z'   # buoy on its mooring; earlier readings are deck/deployment noise
 DO_HYPOXIC_MGL = 2.0     # widely used hypoxia threshold
 DO_STRESS_MGL = 5.0      # below ~5 mg/L many fish & shellfish are stressed
 UMOL_TO_MGL = 0.031998   # 1 µmol/L O2 = 0.032 mg/L
@@ -96,6 +97,7 @@ def load(data_root):
     d['value'] = pd.to_numeric(d['value'], errors='coerce')
     d['t'] = pd.to_datetime(d['timestamp'], utc=True, errors='coerce', format='mixed')
     d = d.dropna(subset=['t', 'value'])
+    d = d[d['t'] >= pd.Timestamp(SETTLED_UTC)]
     for c in ['sensorPosition', 'data_type_name', 'unit_type', 'units']:
         d[c] = d[c].fillna('').astype(str).str.replace(r'\.0$', '', regex=True)
     # the API adds an encoding suffix ("…_mean_13bits") that the dashboard CSV export doesn't — make them match
@@ -200,7 +202,7 @@ def insights(SS, S=None):
             continue
         loc = col.copy()
         loc.index = bc.local(loc.index)
-        out.append(('🌡️', f"Water temperature ({s['pos_txt']}): {s['min'] + 0:.1f}–{s['max']:.1f} °C",
+        out.append(('🌡️', f"Water temperature ({s['pos_txt']}): {round(s['min'], 1) + 0:.1f}–{s['max']:.1f} °C",
                     f"Coldest {loc.idxmin():%b %d, %Y}, warmest {loc.idxmax():%b %d, %Y}. "
                     f"Latest reading {s['latest']:.1f} °C ({s['latest'] * 9 / 5 + 32:.0f} °F)."))
     temps = [s for s in _find(SS, 'temp') if s['pos'] not in ('', 'nan')]
