@@ -15,43 +15,6 @@ Every hour, GitHub pulls the latest data from Sofar and saves it here, then rebu
 
 ---
 
-## One-time setup (≈10 minutes, all in the browser)
-
-1. **Create the repository**
-   1. On github.com, click **＋ → New repository**.
-   2. Name it exactly `UNE-Camp-Ellis-SPOT-32787C` and choose **Public**. The free tier of GitHub Pages needs a public repo. The buoy's Sofar page is already public, and your token stays secret either way.
-   3. Leave "Add a README" **unticked**, then click **Create repository**.
-
-2. **Upload these files**
-   1. On the new repo's page, click **uploading an existing file**.
-   2. Drag in *everything* from this folder, including the `.github` folder.
-   3. Click **Commit changes**.
-
-   > If the `.github` folder didn't upload (some browsers skip folders starting with a dot):
-   > 1. Click **Add file → Create new file**.
-   > 2. Type the name `.github/workflows/update-buoy.yml`.
-   > 3. Paste in the contents of that file from this folder, then commit.
-
-3. **Add your Sofar API token as a secret**
-   1. Get the token at <https://spotter.sofarocean.com/api> (signed in to the account that owns the buoy).
-   2. In the repo, open **Settings → Secrets and variables → Actions → New repository secret**.
-   3. Name: `SOFAR_API_TOKEN`. Value: paste the token. Click **Add secret**.
-
-   GitHub encrypts the secret, and it is never shown in logs or on the website.
-
-4. **Turn on the website:** go to **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-
-5. **Run it the first time**
-   1. Open the **Actions** tab and click **"I understand my workflows, go ahead and enable them"** if GitHub asks.
-   2. Click **Update buoy dashboard → Run workflow**.
-   3. The first run back-fills everything since September 1, and every Smart Mooring reading since the November 3 launch. It can take 10–20 minutes.
-
-   When the run finishes, the dashboard is live at **https://ekelting.github.io/UNE-Camp-Ellis-SPOT-32787C/**.
-
-That's it: it now updates **every hour, forever, without anyone's computer switched on**.
-
----
-
 ## Everyday use
 
 - **To see the data,** open the dashboard link. Every chart has hover details, zoom, and a feet/metres switch.
