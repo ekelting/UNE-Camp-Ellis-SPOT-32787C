@@ -18,7 +18,6 @@ Every hour, GitHub pulls the latest data from Sofar and saves it here, then rebu
 ## Everyday use
 
 - **To see the data,** open the dashboard link. Every chart has hover details, zoom, and a feet/metres switch.
-- **To force an update now,** go to **Actions → Update buoy dashboard → Run workflow**.
 - **To get the spreadsheet,** use the button on the dashboard. In Drive, open it with **Open with → Google Sheets**.
 - **To keep a Google Sheet that updates itself,** type this in any cell. Google refreshes it about every hour:
 
