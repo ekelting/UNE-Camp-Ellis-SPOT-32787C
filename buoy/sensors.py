@@ -98,6 +98,9 @@ def load(data_root):
     d = d.dropna(subset=['t', 'value'])
     for c in ['sensorPosition', 'data_type_name', 'unit_type', 'units']:
         d[c] = d[c].fillna('').astype(str).str.replace(r'\.0$', '', regex=True)
+    # the API adds an encoding suffix ("…_mean_13bits") that the dashboard CSV export doesn't — make them match
+    d['data_type_name'] = d['data_type_name'].str.replace(r'_\d+bits$', '', regex=True)
+    d = d.sort_values('unit_type', ascending=False)          # prefer API rows (they carry unit_type) on overlap
     d = d.drop_duplicates(subset=['t', 'sensorPosition', 'data_type_name'])
     d['group'] = [classify(a, b, c) for a, b, c in zip(d['data_type_name'], d['unit_type'], d['units'])]
     return d
@@ -113,7 +116,8 @@ def build(d):
     if d is None or d.empty:
         return dict(has=False)
     series, cols = [], {}
-    for (grp, pos, dtype, utype, units), g in d.groupby(['group', 'sensorPosition', 'data_type_name', 'unit_type', 'units']):
+    for (grp, pos, dtype, units), g in d.groupby(['group', 'sensorPosition', 'data_type_name', 'units']):
+        utype = next((u for u in g['unit_type'] if u), '')
         v = g.set_index('t')['value'].sort_index()
         if grp in ('cur_speed', 'cur_u', 'cur_v'):
             v, units = _speed_to_ms(v, units), 'm/s'
@@ -196,7 +200,7 @@ def insights(SS, S=None):
             continue
         loc = col.copy()
         loc.index = bc.local(loc.index)
-        out.append(('🌡️', f"Water temperature ({s['pos_txt']}): {s['min']:.1f}–{s['max']:.1f} °C",
+        out.append(('🌡️', f"Water temperature ({s['pos_txt']}): {s['min'] + 0:.1f}–{s['max']:.1f} °C",
                     f"Coldest {loc.idxmin():%b %d, %Y}, warmest {loc.idxmax():%b %d, %Y}. "
                     f"Latest reading {s['latest']:.1f} °C ({s['latest'] * 9 / 5 + 32:.0f} °F)."))
     temps = [s for s in _find(SS, 'temp') if s['pos'] not in ('', 'nan')]
