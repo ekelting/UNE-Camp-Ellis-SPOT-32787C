@@ -1,0 +1,70 @@
+# 🌊 Every hour: pull new buoy data from Sofar, save it, rebuild the dashboard, publish it.
+name: Update buoy dashboard
+
+on:
+  schedule:
+    - cron: "17 * * * *"      # every hour at :17 (UTC)
+  workflow_dispatch:           # "Run workflow" button on the Actions tab
+  push:
+    branches: [main]
+    paths: ["buoy/**", ".github/workflows/**", "requirements.txt"]
+
+permissions:
+  contents: write              # to commit new data into data/
+  pages: write                 # to publish the website
+  id-token: write
+
+concurrency:
+  group: buoy-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: 🛰️ Fetch new data from Sofar
+        env:
+          SOFAR_API_TOKEN: ${{ secrets.SOFAR_API_TOKEN }}
+        run: python buoy/fetch.py --max-minutes 40
+
+      - name: 💾 Save new data to the repository
+        run: |
+          git config user.name  "buoy-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No new data this hour."
+          else
+            git commit -q -m "🌊 buoy data $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull -q --rebase origin main
+            git push -q
+          fi
+
+      - name: 🏗️ Build dashboard + spreadsheet
+        run: python buoy/build.py --out site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
