@@ -31,7 +31,7 @@ The dashboard shows:
   - peak periods over 22 s
   - positions more than 150 m from the mooring, and sensor readings from before the buoy was moored on 3 Nov 2025
 - **Storm events:** hourly wave height of at least 1 m (3.3 ft) lasting 6+ hours.
-- **Wave power:** uses linear wave theory for a depth of about 32 ft (9.75 m, NOAA chart, low tide), with the energy period taken from each spectrum (≥ 0.04 Hz).
+- **Wave power:** uses linear wave theory for a depth of about 37 ft (11.3 m, NOAA chart sounding at the buoy, low tide), with the energy period taken from each spectrum (≥ 0.04 Hz).
 - **Wind:** this is the Spotter's estimate from the waves, not an anemometer reading.
 - **Dissolved oxygen:** converted to mg/L by the sensor assuming a salinity of 35 ppt. Near the Saco River plume, the true values may be slightly higher.
 
