@@ -7,7 +7,7 @@ on:
   workflow_dispatch:           # "Run workflow" button on the Actions tab
   push:
     branches: [main]
-    paths: ["buoy/**", ".github/workflows/**", "requirements.txt"]
+    paths: ["buoy/**", ".github/workflows/**", "requirements.txt", "site.json", "data/seed/**"]
 
 permissions:
   contents: write              # to commit new data into data/
@@ -47,8 +47,12 @@ jobs:
             echo "No new data this hour."
           else
             git commit -q -m "🌊 buoy data $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git pull -q --rebase origin main
-            git push -q
+            # retry if someone else (e.g. a manual upload) pushed at the same moment
+            for i in 1 2 3 4 5; do
+              git pull -q --rebase origin main && git push -q && break
+              echo "Push collided with another change - retrying ($i/5)..."
+              sleep $((i * 10))
+            done
           fi
 
       - name: 🏗️ Build dashboard + spreadsheet
