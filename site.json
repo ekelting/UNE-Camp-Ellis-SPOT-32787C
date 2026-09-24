@@ -10,8 +10,8 @@
   "waves_fetch_start_utc": "2026-09-01T04:00:00Z",
   "mooring_lat": 43.4727,
   "mooring_lon": -70.36053,
-  "depth_m": null,
-  "depth_note": "",
+  "depth_m": 9.75,
+  "depth_note": "at low tide, from the NOAA nautical chart",
   "river_note": "near the Saco River mouth the water can be fresher",
   "sister_sites": [
     {
