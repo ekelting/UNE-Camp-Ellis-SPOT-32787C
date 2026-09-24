@@ -1,0 +1,24 @@
+{
+  "spotter_id": "SPOT-32787C",
+  "short_name": "Camp Ellis",
+  "site_name": "Camp Ellis, Saco Bay, Maine",
+  "github_user": "ekelting",
+  "github_repo": "UNE-Camp-Ellis-SPOT-32787C",
+  "timezone": "America/New_York",
+  "deployed_utc": "2025-11-03T05:00:00Z",
+  "settled_utc": "2025-11-03T15:00:00Z",
+  "waves_fetch_start_utc": "2026-09-01T04:00:00Z",
+  "mooring_lat": 43.4727,
+  "mooring_lon": -70.36053,
+  "depth_m": null,
+  "depth_note": "",
+  "river_note": "near the Saco River mouth the water can be fresher",
+  "sister_sites": [
+    {
+      "label": "Biddeford Pool buoy",
+      "url": "https://ekelting.github.io/UNE-Biddeford-Pool-SPOT-32905C/",
+      "lat": 43.43761,
+      "lon": -70.34923
+    }
+  ]
+}

@@ -38,3 +38,5 @@ The dashboard shows:
 ## Credits
 
 The data comes from [Sofar Ocean](https://www.sofarocean.com/) Spotter SPOT-32787C with Smart Mooring sensors, deployed by the University of New England.
+
+**Sister site:** [Biddeford Pool wave buoy](https://ekelting.github.io/UNE-Biddeford-Pool-SPOT-32905C/)
