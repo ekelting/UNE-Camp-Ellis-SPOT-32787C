@@ -1,7 +1,7 @@
 """
 build.py — turns everything under data/ into the website in site/:
   site/index.html                         the dashboard
-  site/Camp_Ellis_Buoy_Summary.xlsx       the spreadsheet (opens in Excel / Google Sheets)
+  site/<Site>_Buoy_Summary.xlsx           the spreadsheet (opens in Excel / Google Sheets)
   site/data/*.csv                         tidy tables (hourly, daily, monthly, storms, sensors)
                                           — link these into Google Sheets with =IMPORTDATA(url)
 
@@ -40,7 +40,7 @@ def main():
     SS = sn.build(sn.load(a.data))
     print(f"   {len(SS.get('series', []))} sensor channels" if SS.get('has') else '   none yet')
 
-    xlsx = 'Camp_Ellis_Buoy_Summary.xlsx'
+    xlsx = f'{bc.FILE_STEM}_Summary.xlsx'
     msheet.build_xlsx(S, os.path.join(a.out, xlsx), SS)
 
     # tidy CSV exports (handy for Google Sheets IMPORTDATA / MATLAB / R)

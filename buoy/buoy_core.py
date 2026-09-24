@@ -1,5 +1,5 @@
 """
-buoy_core.py - the data engine behind the Camp Ellis buoy report.
+buoy_core.py - the data engine behind the buoy website (site settings: site.json).
 
 Reads every Sofar Spotter "embedded-history" CSV in the buoy folder (and the
 optional live-API cache), cleans it, and computes the statistics used by the
@@ -11,6 +11,8 @@ only place you might want to tweak.
 from __future__ import annotations
 
 import glob
+import json
+import re
 import math
 import os
 import pickle
@@ -20,13 +22,24 @@ import numpy as np
 import pandas as pd
 
 # ----------------------------------------------------------------- settings --
-SPOTTER_ID = "SPOT-32787C"
-SITE_NAME = "Camp Ellis, Saco Bay, Maine"
-GITHUB_USER = "ekelting"
-GITHUB_REPO = "UNE-Camp-Ellis-SPOT-32787C"
+# per-site settings live in site.json at the top of the repository
+_CFG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'site.json')
+try:
+    with open(_CFG_PATH, encoding='utf-8') as _fh:
+        CFG = json.load(_fh)
+except OSError:
+    CFG = {}
+SPOTTER_ID = CFG.get('spotter_id', 'SPOT-32787C')
+SITE_SHORT = CFG.get('short_name', 'Camp Ellis')
+SITE_NAME = CFG.get('site_name', 'Camp Ellis, Saco Bay, Maine')
+GITHUB_USER = CFG.get('github_user', 'ekelting')
+GITHUB_REPO = CFG.get('github_repo', 'UNE-Camp-Ellis-SPOT-32787C')
 SITE_URL = f"https://{GITHUB_USER}.github.io/{GITHUB_REPO}/"
 REPO_URL = f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}"
-LOCAL_TZ = "America/New_York"
+LOCAL_TZ = CFG.get('timezone', 'America/New_York')
+DEPTH_M = CFG.get('depth_m')              # None → deep-water wave-power formula
+SISTER_SITES = CFG.get('sister_sites', [])
+FILE_STEM = re.sub(r'[^A-Za-z0-9]+', '_', SITE_SHORT).strip('_') + '_Buoy'
 STORM_HS_M = 1.0          # a "storm event" = hourly Hs at/above this ...
 STORM_MIN_HOURS = 6       # ... for at least this many hours
 STORM_MERGE_GAP_H = 6     # dips shorter than this are merged into one event
@@ -155,6 +168,24 @@ def load_all(root, cache_dir=None, verbose=True):
     return raw, spec, files
 
 
+def wave_power_kw_m(hs, te, depth=None):
+    """Wave energy flux P = E·Cg (kW per metre of crest). Uses finite-depth linear theory when the site
+    depth is known (site.json depth_m), otherwise the deep-water limit ρg²Hs²Te/64π."""
+    depth = DEPTH_M if depth is None else depth
+    hs, te = np.asarray(hs, float), np.asarray(te, float)
+    if not depth:
+        return RHO_G2_64PI * hs ** 2 * te
+    g, rho = 9.81, 1025.0
+    L0 = g * te ** 2 / (2 * math.pi)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        L = L0 * np.tanh((2 * math.pi * depth / L0) ** 0.75) ** (2 / 3)   # Fenton & McKee (1990)
+        k = 2 * math.pi / L
+        n = 0.5 * (1 + 2 * k * depth / np.sinh(2 * k * depth))
+        cg = n * L / te
+    E = rho * g * hs ** 2 / 16
+    return E * cg / 1000
+
+
 # ----------------------------------------------------------------- cleaning --
 @dataclass
 class BuoyData:
@@ -224,7 +255,7 @@ def clean(raw, spec, files):
     ratio = float(ratio) if np.isfinite(ratio) else 1.15
     qc['te_over_tm'] = ratio
     waves['te'] = waves['te'].fillna(waves['tm'] * ratio)
-    waves['power_kw_m'] = RHO_G2_64PI * waves['hs'] ** 2 * waves['te']
+    waves['power_kw_m'] = wave_power_kw_m(waves['hs'].values, waves['te'].values)
 
     # --- met / housekeeping (every row)
     mcols = [c for c in ['pres', 'batt', 'solar', 'humid', 'lat', 'lon', 'dist_m'] if c in raw]
@@ -468,8 +499,9 @@ def insights(S):
                 f"{st['dir_mode_pct']:.0f}% of all wave readings came from the {st['dir_mode']} sector, and the energy-weighted average "
                 f"direction is {st['dir_energy']:.0f}° ({compass(st['dir_energy'])}). "
                 + (f"Every one of the {len(ev)} storm events came from the {', '.join(sorted(ev['dir'].unique()))}. " if len(ev) else "")
-                + "That narrow window likely reflects waves refracting and being sheltered as they enter Saco Bay — and it is a key boundary "
-                "condition for longshore-transport and shoreline-change modeling at Camp Ellis."))
+                + "A narrow window like this usually reflects waves bending (refracting) and being sheltered by the coastline "
+                f"before they reach the buoy — and it is a key boundary condition for longshore-transport and shoreline-change "
+                f"modeling around {SITE_SHORT}."))
 
     # storms
     if len(ev):
@@ -507,7 +539,7 @@ def insights(S):
     homes_days = st['energy_mwh_m'] * 1000 / 29
     out.append(("⚡", f"~{st['energy_mwh_m']:.1f} MWh of wave energy per metre of coastline",
                 f"That's the energy that rolled past each metre-wide strip of the buoy site since deployment — roughly what a typical U.S. home "
-                f"uses in {homes_days:.0f} days. (Deep-water estimate; treat as ballpark.) The buoy has ridden an estimated "
+                f"uses in {homes_days:.0f} days. (Estimate; treat as ballpark.) The buoy has ridden an estimated "
                 f"{st['n_waves'] / 1e6:.1f} million waves."))
 
     # health
@@ -537,8 +569,10 @@ def qc_notes(S):
         f"{q['off_station_rows']} rows logged during deployment (buoy > {OFF_STATION_M} m from its mooring) were dropped.",
         "Wind speed/direction are estimated by the Spotter from the wave spectrum, not measured by an anemometer — "
         "they are unreliable in light winds and in sheltered water.",
-        "Wave power/energy use the deep-water formula P = ρg²Hs²Te/64π with Te computed from each spectrum (0.04 Hz and up). "
-        "At the buoy's shallow depth this is an approximation.",
+        (f"Wave power/energy use linear wave theory for a water depth of {DEPTH_M:g} m (P = E·Cg), with the energy period Te "
+         "computed from each spectrum (0.04 Hz and up)." if DEPTH_M else
+         "Wave power/energy use the deep-water formula P = ρg²Hs²Te/64π with Te computed from each spectrum (0.04 Hz and up). "
+         "At the buoy's shallow depth this is an approximation."),
     ]
     if not q['sst_available']:
         notes.append("This buoy has no sea-surface temperature sensor, so SST is not reported.")

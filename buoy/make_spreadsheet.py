@@ -1,5 +1,5 @@
 """
-make_spreadsheet.py - builds Camp_Ellis_Buoy_Summary.xlsx (opens in Excel or Google Sheets).
+make_spreadsheet.py - builds <Site>_Buoy_Summary.xlsx (opens in Excel or Google Sheets).
 Called by update_buoy_report.py; you don't need to run it directly.
 """
 import datetime as dt
@@ -288,7 +288,7 @@ def build_xlsx(S, path, SS=None):
 
     # ============================================================== Overview ==
     wo = wb.create_sheet('Overview', 0)
-    _title(wo, f'🌊 Camp Ellis Wave Buoy ({st["spotter"]}) — Data Summary',
+    _title(wo, f'🌊 {bc.SITE_SHORT} Wave Buoy ({st["spotter"]}) — Data Summary',
            f'{st["site"]} · {st["first"]:%b %d, %Y} → {st["last"]:%b %d, %Y} · '
            f'{st["n_files"]} monthly files · generated {dt.datetime.now():%b %d, %Y %I:%M %p}', 6)
     _widths(wo, [40, 16, 10, 14, 70, 4])

@@ -33,8 +33,8 @@ API = 'https://api.sofarocean.com/api'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'data')
 STATE = os.path.join(DATA, 'state.json')
-DEPLOYED = '2025-11-03T00:00:00Z'      # buoy launch — sensor back-fill starts here
-SEED_END = '2026-09-01T04:00:00Z'      # the committed CSV seed covers waves up to here
+DEPLOYED = bc.CFG.get('deployed_utc', '2025-11-03T00:00:00Z')        # buoy launch — sensor back-fill starts here
+SEED_END = bc.CFG.get('waves_fetch_start_utc') or DEPLOYED            # wave back-fill starts here
 OVERLAP = pd.Timedelta(hours=3)        # re-ask for a little overlap each run (late-arriving data)
 
 WAVE_COLS = {'significantWaveHeight': 'Significant Wave Height (m)', 'peakPeriod': 'Peak Period (s)',
@@ -304,6 +304,20 @@ def main():
         pd.concat([old, s.astype(str)]).drop_duplicates(subset=['Epoch Time'], keep='last').to_csv(fn, index=False)
         print(f"   status   → battery {s['Battery Voltage (V)'][0]} V, humidity {s['Humidity (%rel)'][0]}%")
     safe('buoy status', status)
+    if any('device not found' in e.lower() for e in api.errors):
+        # the token works but this account can't see our buoy — list what it CAN see, to help sort it out
+        try:
+            j = api.get('devices')
+            devs = (j.get('data') or {}).get('devices') or j.get('devices') or []
+            ids = [f"{d.get('spotterId')} ({d.get('name') or 'no name'})" for d in devs]
+        except Exception as e:  # noqa: BLE001
+            ids = [f'could not list devices: {e}']
+        msg = (f"The token works, but its Sofar account can't see {bc.SPOTTER_ID}. Devices this token can see: "
+               + (', '.join(ids) if ids else 'none'))
+        print('❌ ' + msg)
+        print(f'::error title=Wrong Sofar account for this buoy::{msg}')
+        api.errors.insert(0, msg)
+        st['devices_visible_to_token'] = ids
     st['last_errors'] = api.errors[-6:]
     st['dropped_params'] = sorted(api.dropped)
     st['last_run'] = iso(pd.Timestamp.now(tz='UTC'))

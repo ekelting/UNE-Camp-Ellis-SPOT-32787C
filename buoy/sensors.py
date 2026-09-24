@@ -35,7 +35,7 @@ INSTRUMENTS = [  # data-type prefix → short friendly instrument name
     (r'^bm_soft', 'temp sensor'), (r'^aanderaa', 'current meter'), (r'^bm_do', 'oxygen sensor'),
     (r'^rbr', 'RBR sensor'), (r'^bm_borealis|spl', 'hydrophone'), (r'^bm_', 'Bristlemouth sensor'),
 ]
-SETTLED_UTC = '2025-11-03T15:00:00Z'   # buoy on its mooring; earlier readings are deck/deployment noise
+SETTLED_UTC = bc.CFG.get('settled_utc', '2025-11-03T15:00:00Z')   # buoy on its mooring; earlier = deployment noise
 DO_HYPOXIC_MGL = 2.0     # widely used hypoxia threshold
 DO_STRESS_MGL = 5.0      # below ~5 mg/L many fish & shellfish are stressed
 UMOL_TO_MGL = 0.031998   # 1 µmol/L O2 = 0.032 mg/L
@@ -222,7 +222,7 @@ def insights(SS, S=None):
             low = (mgl < DO_STRESS_MGL).mean() * 100
             hyp = (mgl < DO_HYPOXIC_MGL).mean() * 100
             sal = [x for x in SS['series'] if x['group'] == 'diag' and 'salinity' in x['dtype'] and x['pos'] == s['pos']]
-            saltxt = (f" Note: the sensor converts to mg/L assuming a fixed salinity of {sal[0]['mean']:.0f} ppt; near the Saco River "
+            saltxt = (f" Note: the sensor converts to mg/L assuming a fixed salinity of {sal[0]['mean']:.0f} ppt; {bc.CFG.get('river_note') or 'near river mouths the water can be fresher'}, "
                       "mouth the water can be fresher, so true values may be slightly higher.") if sal else ''
             out.append(('🫧', f"Dissolved oxygen ({s['pos_txt']}): " + ('healthy' if low == 0 else ('healthy, with brief dips below 5 mg/L' if low < 1 else 'often below 5 mg/L')),
                         f"Average {mgl.mean():.1f} mg/L (range {mgl.min():.1f}–{mgl.max():.1f}). Below the 5 mg/L stress line "

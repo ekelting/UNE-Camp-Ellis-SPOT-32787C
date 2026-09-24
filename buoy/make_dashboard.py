@@ -1,5 +1,5 @@
 """
-make_dashboard.py - builds Camp_Ellis_Buoy_Dashboard.html, a single self-contained
+make_dashboard.py - builds the dashboard page (index.html), a single self-contained
 page (works offline, just double-click it). Called by update_buoy_report.py.
 """
 import datetime as dt
@@ -43,6 +43,10 @@ def _clean(v):
 
 def _ts(idx):
     return [t.strftime('%Y-%m-%d %H:%M') for t in idx]
+
+
+def esc_js(t):
+    return str(t).replace('<', '').replace('>', '')
 
 
 def _fig(traces, layout):
@@ -143,15 +147,44 @@ def build_figs(S, bd):
     # 5) pressure + waves (stacked panels, shared time axis — no dual axis) -----
     P = bd.met['pres'].resample('1h').mean()
     P.index = bc.local(P.index).tz_localize(None)
+    W = H['wspd'] * 2.23694        # m/s → mph
     figs['pressure'] = _fig([
         dict(type='scattergl', mode='lines', name='Pressure', x=_ts(P.index), y=_clean(P.tolist()),
-             line=dict(color=VIOLET, width=1.4), xaxis='x', yaxis='y2',
+             line=dict(color=VIOLET, width=1.4), xaxis='x', yaxis='y3',
              hovertemplate='%{x|%b %d %H:%M}<br>%{y:.0f} hPa<extra></extra>'),
+        dict(type='scattergl', mode='lines', name='Wind', x=_ts(H.index), y=_clean(W.tolist()),
+             line=dict(color=AQUA, width=1.1), xaxis='x', yaxis='y2',
+             hovertemplate='%{x|%b %d %H:%M}<br>%{y:.0f} mph wind (estimated)<extra></extra>'),
         dict(type='scattergl', mode='lines', name='Wave height', x=_ts(H.index), y=_clean(H['hs'].tolist()),
              line=dict(color=BLUE, width=1.1), xaxis='x', yaxis='y', meta='len',
              hovertemplate='%{x|%b %d %H:%M}<br>%{y:.1f} UNIT<extra></extra>'),
-    ], dict(yaxis2=dict(title='Air pressure (hPa)', domain=[0.55, 1], anchor='x'), yaxis=dict(title='Wave height, Hs (UNIT)', domain=[0, 0.45]),
-            showlegend=False, height=460))
+    ], dict(yaxis3=dict(title='Air pressure (hPa)', domain=[0.70, 1], anchor='x'),
+            yaxis2=dict(title='Wind speed* (mph)', domain=[0.36, 0.64], anchor='x', rangemode='tozero'),
+            yaxis=dict(title='Wave height, Hs (UNIT)', domain=[0, 0.30]),
+            showlegend=False, height=560))
+
+    # 8) where is the buoy? live map (free OpenStreetMap/CARTO tiles — no account or key needed)
+    M = bd.met[['lat', 'lon']].dropna()
+    if len(M):
+        lat0 = bc.CFG.get('mooring_lat') or float(M['lat'].median())
+        lon0 = bc.CFG.get('mooring_lon') or float(M['lon'].median())
+        last = M.iloc[-1]
+        wk = M.loc[M.index[-1] - pd.Timedelta(days=7):].resample('1h').mean().dropna()
+        tr = [dict(type='scattermap', mode='lines', name='Last 7 days of drift', lat=_clean(wk['lat'].tolist()),
+                   lon=_clean(wk['lon'].tolist()), line=dict(color=BLUE, width=2), hoverinfo='skip'),
+              dict(type='scattermap', mode='markers', name='Mooring (anchor)', lat=[lat0], lon=[lon0],
+                   marker=dict(size=11, color=VIOLET), hovertemplate='⚓ Mooring<br>%{lat:.5f}, %{lon:.5f}<extra></extra>'),
+              dict(type='scattermap', mode='markers', name='Buoy now', lat=[float(last['lat'])], lon=[float(last['lon'])],
+                   marker=dict(size=16, color=ORANGE),
+                   hovertemplate=f'🛟 {esc_js(bc.SITE_SHORT)} buoy — latest position<br>%{{lat:.5f}}, %{{lon:.5f}}<extra></extra>')]
+        for sis in bc.SISTER_SITES:
+            if sis.get('lat') and sis.get('lon'):
+                tr.append(dict(type='scattermap', mode='markers+text', name=sis['label'], lat=[sis['lat']], lon=[sis['lon']],
+                               text=[sis['label']], textposition='top center', marker=dict(size=10, color='#8a8984'),
+                               hovertemplate=esc_js(sis['label']) + '<extra></extra>'))
+        figs['map'] = _fig(tr, dict(map=dict(center=dict(lat=lat0, lon=lon0), zoom=12.2),
+                                    legend=dict(orientation='h', y=0, x=0, yanchor='bottom', bgcolor='rgba(255,255,255,0.75)'),
+                                    margin=dict(l=0, r=0, t=0, b=0), height=380))
 
     # 6) spectrum by season -----------------------------------------------------
     sp = bd.spec
@@ -324,6 +357,8 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
              'Waves coming from', f'{lt["dir"]}', f'{lt["dm"]:.0f}° — heading toward {bc.compass((lt["dm"] + 180) % 360)}')
         if np.isfinite(lt['dm']) else tile('🧭', 'Waves coming from', '—'),
         tile('🌬️', 'Air pressure', f'{lt["pres"]:.0f} hPa', f'{parrow} over 3 h') if np.isfinite(lt['pres']) else tile('🌬️', 'Air pressure', '—'),
+        tile('💨', 'Wind (estimated)', f'{lt["wspd"] * 2.23694:.0f} mph',
+             f'from the {bc.compass(lt["wdir"])} · {lt["wspd"]:.1f} m/s') if np.isfinite(lt.get('wspd', np.nan)) else tile('💨', 'Wind (estimated)', '—'),
     ] + [tile(*t) for t in stiles] + [
         tile('🔋', 'Buoy battery', f'{lt["batt"]:.2f} V', 'full' if lt['batt'] >= 3.8 else ('mid-level' if lt['batt'] >= 3.6 else 'low ⚠️'))
         if np.isfinite(lt['batt']) else tile('🔋', 'Buoy battery', '—'),
@@ -374,6 +409,20 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
     if downloads:
         dl = '<div class="chips" style="margin-top:12px">' + ''.join(
             f'<a class="chip dl" href="{esc(href)}" download>{esc(lbl)}</a>' for lbl, href in downloads) + '</div>'
+    M = bd.met[['lat', 'lon', 'dist_m']].dropna()
+    where = ''
+    if len(M):
+        lastp = M.iloc[-1]
+        lt_where = bc.local(pd.DatetimeIndex([M.index[-1]]))[0]
+        depth = bc.CFG.get('depth_m')
+        rows = [('📍 Latest position', f'{lastp["lat"]:.5f}° N, {abs(lastp["lon"]):.5f}° W'),
+                ('🕒 Position time', f'{lt_where:%b %d, %Y %I:%M %p}'),
+                ('⚓ Distance from its anchor', f'{lastp["dist_m"]:.0f} m ({lastp["dist_m"] * 3.28084:.0f} ft)'),
+                ('🌊 Water depth', (f'about {depth * 3.28084:.0f} ft ({depth:g} m)' + (f' {esc(bc.CFG.get("depth_note"))}' if bc.CFG.get('depth_note') else ''))
+                                  if depth else 'not recorded yet'),
+                ('🚀 In the water since', f'{pd.Timestamp(bc.CFG.get("deployed_utc", st["first"])).tz_convert(bc.LOCAL_TZ):%B %d, %Y}')]
+        where = ''.join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in rows)
+    sisters = ''.join(f'<a class="btn" href="{esc(x["url"])}">🔀 {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
     if plotly_src:
         plotly_tag = f'<script src="{plotly_src}"></script>'
     else:
@@ -383,11 +432,11 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
     page = TEMPLATE
     for k, v in {
         '%%PLOTLY_TAG%%': plotly_tag, '%%FIGS%%': fig_json, '%%SENSORS%%': sensor_block, '%%HOWTO%%': howto,
-        '%%DOWNLOADS%%': dl,
+        '%%DOWNLOADS%%': dl, '%%WHERE%%': where, '%%SISTERS%%': sisters,
         '%%FOOTSRC%%': (f'from <a href="{bc.REPO_URL}">{bc.GITHUB_USER}/{bc.GITHUB_REPO}</a> on GitHub' if mode == 'web'
                         else 'by <code>buoy_tools/update_buoy_report.py</code>'), '%%NOW_TILES%%': now_tiles, '%%SEASON_TILES%%': season_tiles,
         '%%CARDS%%': cards, '%%STORM_ROWS%%': srows, '%%STORM_BTN%%': storm_btn, '%%STORM_LEDE%%': storm_lede, '%%QC%%': qc, '%%STALE%%': stale_banner,
-        '%%SPOTTER%%': esc(st['spotter']), '%%SITE%%': esc(st['site']),
+        '%%SHORT%%': esc(bc.SITE_SHORT), '%%SPOTTER%%': esc(st['spotter']), '%%SITE%%': esc(st['site']),
         '%%LATEST%%': f'{lt["time"]:%A, %b %d %Y at %I:%M %p}',
         '%%GENERATED%%': f'{pd.Timestamp.now(tz=bc.LOCAL_TZ):%b %d, %Y %I:%M %p %Z}',
         '%%STORM_DEF%%': f'waves ≥ {bc.ft(bc.STORM_HS_M):.1f} ft ({bc.STORM_HS_M:g} m) for {bc.STORM_MIN_HOURS}+ hours',
@@ -404,7 +453,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
 TEMPLATE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Camp Ellis Buoy</title>
+<title>%%SHORT%% Buoy</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <style>
 :root{--bg:#f5f8fa;--card:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#8a8984;--line:#e3e8ec;--accent:#1c5cab;
@@ -423,6 +472,9 @@ header p{margin:6px 0 0;opacity:.88}
 .waves{position:absolute;left:0;right:0;bottom:-2px;height:60px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .btn{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:999px;padding:6px 14px;cursor:pointer;font:inherit;font-size:14px}
+a.btn{text-decoration:none;display:inline-block}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border-bottom:0}.kv span{color:var(--ink2)}.kv b{text-align:right}
 .btn[aria-pressed="true"]{background:#fff;color:#0d366b;font-weight:600}
 section{margin-top:28px}
 h2{font-size:22px;margin:0 0 4px}
@@ -466,12 +518,13 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
 </style></head>
 <body>
 <header class="hero"><div class="wrap">
-  <h1>🌊 The Camp Ellis Wave Buoy</h1>
+  <h1>🌊 The %%SHORT%% Wave Buoy</h1>
   <p>What the ocean has been up to off %%SITE%% · Sofar Spotter <b>%%SPOTTER%%</b></p>
   <div class="toolbar">
     <button class="btn" id="u-ft" aria-pressed="true">📏 feet</button>
     <button class="btn" id="u-m" aria-pressed="false">📐 metres</button>
     <button class="btn" id="theme">🌓 light / dark</button>
+    %%SISTERS%%
   </div>
   %%DOWNLOADS%%
 </div>
@@ -485,6 +538,10 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
     <div class="chips">%%VIBES%%</div>
     %%STALE%%
   </section>
+
+  <section><h2>📍 Where is the buoy?</h2><p class="lede">Updates every hour. The orange dot is the buoy's latest position; the line is where it has drifted around its anchor over the last week.</p>
+    <div class="grid two"><div class="card" style="padding:0;overflow:hidden"><div id="map" class="chart" style="min-height:380px"></div></div>
+    <div class="card">%%WHERE%%</div></div></section>
 
   <section><h2>📊 The season so far</h2><p class="lede">Big-picture numbers since the buoy went in the water.</p>
     <div class="grid tiles">%%SEASON_TILES%%</div></section>
@@ -517,7 +574,7 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
     <p class="lede">Instruments hanging under the buoy: water temperature, dissolved oxygen, currents and more.</p>
     %%SENSORS%%</section>
 
-  <section><h2>🌬️ Storms leave a fingerprint</h2><p class="lede">When air pressure (top) drops sharply, the waves (bottom) usually jump. That's a storm passing.</p>
+  <section><h2>🌬️ Storms leave a fingerprint</h2><p class="lede">When air pressure (top) drops sharply, the wind (middle) picks up and the waves (bottom) jump. That's a storm passing. *Wind is estimated by the buoy from the waves.</p>
     <div class="card"><div id="pressure" class="chart"></div></div></section>
 
   <section><h2>🌀 Storm leaderboard</h2><p class="lede">%%STORM_LEDE%%</p>
@@ -533,6 +590,7 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
       <dt>Wave height</dt><dd>“Significant wave height” (Hs): the average height of the biggest third of waves, trough to crest. It's close to what a person on the beach would say the waves are. Single waves can be about twice as big.</dd>
       <dt>Wave rhythm / period</dt><dd>Seconds between wave crests. Short (under 6 s) = choppy local wind waves. Long (10 s+) = swell that travelled from a distant storm and packs more punch.</dd>
       <dt>Direction</dt><dd>The compass direction the waves are coming <i>from</i> (like wind). “E” means waves rolling in from the east.</dd>
+      <dt>Wind*</dt><dd>Estimated by the buoy from the shape of the waves (it has no wind vane), so treat it as approximate — especially in light winds.</dd>
       <dt>hPa</dt><dd>Hectopascals — the unit for air pressure. ~1013 is average; under ~1000 usually means a storm.</dd>
       <dt>Wave energy</dt><dd>How much energy the waves carried past each metre of coastline. 1 kWh ≈ running a microwave for an hour.</dd>
       <dt>Storm event</dt><dd>%%STORM_DEF%%.</dd>
@@ -566,6 +624,9 @@ function themed(layout){
     L.polar.angularaxis=Object.assign({gridcolor:grid,linecolor:grid},L.polar.angularaxis);
     L.polar.radialaxis=Object.assign({gridcolor:grid,linecolor:grid},L.polar.radialaxis);
     if (typeof L.polar.radialaxis.title === 'string') L.polar.radialaxis.title = {text: L.polar.radialaxis.title, font:{size:12, color:ink}};}
+  if (L.map) { const dark = getComputedStyle(document.body).backgroundColor.match(/\d+/g).slice(0,3).reduce((a,c)=>a+ +c,0) < 300;
+    L.map = Object.assign({}, L.map, {style: dark ? 'carto-darkmatter' : 'carto-positron'}); delete L.xaxis; delete L.yaxis;
+    if (L.legend) L.legend = Object.assign({}, L.legend, {bgcolor: dark ? 'rgba(26,26,25,0.8)' : 'rgba(255,255,255,0.8)'}); }
   if (L.xaxis && L.xaxis.rangeselector) L.xaxis.rangeselector=Object.assign({bgcolor:css('--chip'),activecolor:css('--chip2'),font:{color:ink}},L.xaxis.rangeselector);
   return L;
 }
