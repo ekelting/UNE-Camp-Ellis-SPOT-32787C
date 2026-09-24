@@ -133,12 +133,14 @@ def build_xlsx(S, path, SS=None):
     _widths(wd, [12, 9, 9, 9, 9, 10, 10, 9, 9, 9, 10, 10, 9, 9, 9])
     wd.freeze_panes = 'B4'
 
-    ch = _line_chart('🌊 Daily wave height', 'Hs (m)')
+    ch = _line_chart('🌊 Daily wave height', 'Wave height, Hs (m)')
+    ch.x_axis.title = 'Date'
     ch.add_data(Reference(wd, min_col=2, max_col=3, min_row=3, max_row=end_d), titles_from_data=True)
     ch.set_categories(Reference(wd, min_col=1, min_row=4, max_row=end_d))
     ch.x_axis.number_format = 'mmm yy'
     wd.add_chart(ch, 'Q3')
-    ch2 = _line_chart('🌡️ Daily minimum barometric pressure', 'hPa')
+    ch2 = _line_chart('🌡️ Daily minimum barometric pressure', 'Air pressure (hPa)')
+    ch2.x_axis.title = 'Date'
     ch2.add_data(Reference(wd, min_col=12, max_col=12, min_row=3, max_row=end_d), titles_from_data=True)
     ch2.set_categories(Reference(wd, min_col=1, min_row=4, max_row=end_d))
     ch2.y_axis.scaling.min = 980
@@ -174,7 +176,8 @@ def build_xlsx(S, path, SS=None):
 
     b = BarChart()
     b.type, b.grouping = 'col', 'clustered'
-    b.title, b.y_axis.title = '📊 Wave height by month', 'Hs (m)'
+    b.title, b.y_axis.title = '📊 Wave height by month', 'Wave height, Hs (m)'
+    b.x_axis.title = 'Month'
     b.add_data(Reference(wm, min_col=4, max_col=4, min_row=3, max_row=end_m), titles_from_data=True)
     b.add_data(Reference(wm, min_col=6, max_col=7, min_row=3, max_row=end_m), titles_from_data=True)
     b.set_categories(Reference(wm, min_col=1, min_row=4, max_row=end_m))
@@ -183,7 +186,8 @@ def build_xlsx(S, path, SS=None):
     wm.add_chart(b, f'A{tr + 3}')
     b2 = BarChart()
     b2.type = 'col'
-    b2.title, b2.y_axis.title = '⚡ Wave energy delivered each month', 'MJ per metre of wave crest'
+    b2.title, b2.y_axis.title = '⚡ Wave energy delivered each month', 'Wave energy (MJ per metre of coastline)'
+    b2.x_axis.title = 'Month'
     b2.add_data(Reference(wm, min_col=12, max_col=12, min_row=3, max_row=end_m), titles_from_data=True)
     b2.set_categories(Reference(wm, min_col=1, min_row=4, max_row=end_m))
     b2.width, b2.height = 20, 9
@@ -191,7 +195,8 @@ def build_xlsx(S, path, SS=None):
     wm.add_chart(b2, f'L{tr + 3}')
     b3 = BarChart()
     b3.type = 'col'
-    b3.title, b3.y_axis.title = '🌀 Storm hours per month', 'hours'
+    b3.title, b3.y_axis.title = '🌀 Storm hours per month', 'Storm hours (h)'
+    b3.x_axis.title = 'Month'
     b3.add_data(Reference(wm, min_col=22, max_col=22, min_row=3, max_row=end_m), titles_from_data=True)
     b3.set_categories(Reference(wm, min_col=1, min_row=4, max_row=end_m))
     b3.width, b3.height = 20, 9
@@ -202,7 +207,7 @@ def build_xlsx(S, path, SS=None):
     ws = wb.create_sheet('Storms')
     _title(ws, '🌀 Storm events',
            f'Event = hourly Hs ≥ {bc.STORM_HS_M:g} m for {bc.STORM_MIN_HOURS}+ h (dips < {bc.STORM_MERGE_GAP_H} h merged). '
-           'Settings live at the top of buoy_tools/buoy_core.py.', 12)
+           'Listed in time order; sort by column E for the biggest.', 12)
     _header(ws, 3, ['#', 'Start (local)', 'End (local)', 'Duration (h)', 'Peak Hs (m)', 'Peak Hs (ft)', 'Peak time',
                     'Tp at peak (s)', 'Direction', 'Max wind* (m/s)', 'Min pressure (hPa)', 'Energy (MJ/m)', 'Label'])
     end_s = 3
@@ -217,7 +222,8 @@ def build_xlsx(S, path, SS=None):
             ws.cell(row=r, column=6, value=f'=E{r}*3.28084').number_format = '0.0'
         bs = BarChart()
         bs.type = 'col'
-        bs.title, bs.y_axis.title = '🌀 Peak wave height of each storm', 'Hs (m)'
+        bs.title, bs.y_axis.title = '🌀 Peak wave height of each storm', 'Peak wave height, Hs (m)'
+        bs.x_axis.title = 'Storm start date'
         bs.add_data(Reference(ws, min_col=5, max_col=5, min_row=3, max_row=end_s), titles_from_data=True)
         bs.set_categories(Reference(ws, min_col=13, min_row=4, max_row=end_s))
         bs.width, bs.height = 24, 9
@@ -248,7 +254,8 @@ def build_xlsx(S, path, SS=None):
     _widths(wr, [11] + [10] * (tc - 1))
     br = BarChart()
     br.type, br.grouping, br.overlap = 'col', 'stacked', 100
-    br.title, br.y_axis.title = '🧭 Wave direction × height', 'share of readings'
+    br.title, br.y_axis.title = '🧭 Wave direction × height', 'Share of all readings (%)'
+    br.x_axis.title = 'Direction waves come from'
     br.add_data(Reference(wr, min_col=2, max_col=tc - 1, min_row=3, max_row=end_r), titles_from_data=True)
     br.set_categories(Reference(wr, min_col=1, min_row=4, max_row=end_r))
     br.y_axis.number_format = '0%'
@@ -264,7 +271,8 @@ def build_xlsx(S, path, SS=None):
     _header(wk, 3, ['Month', 'Battery min (V)', 'Hull humidity mean (%)', 'Data coverage'])
     end_k = _table(wk, 4, hk, ['@', '0.00', '0.0', '0%']) - 1
     _widths(wk, [17, 17, 14, 12])
-    lk = _line_chart('💧 Hull humidity (monthly mean)', '% relative humidity', 18, 8)
+    lk = _line_chart('💧 Hull humidity (monthly mean)', 'Hull humidity (%)', 18, 8)
+    lk.x_axis.title = 'Month'
     lk.add_data(Reference(wk, min_col=3, max_col=3, min_row=3, max_row=end_k), titles_from_data=True)
     lk.set_categories(Reference(wk, min_col=1, min_row=4, max_row=end_k))
     lk.legend = None
@@ -405,7 +413,7 @@ def build_xlsx(S, path, SS=None):
         c.alignment = Alignment(wrap_text=True)
         row += 1
     wo.cell(row=row + 1, column=1,
-            value='Built automatically by buoy_tools/update_buoy_report.py — rerun it after adding new monthly CSVs.'
+            value='Updated automatically every hour from the buoy (Sofar Ocean Spotter data service). Times are US Eastern.'
             ).font = _font(italic=True, size=8, color='888888')
     wo.freeze_panes = 'A4'
 
@@ -461,7 +469,9 @@ def _sensor_sheets(wb, SS):
     anchor = r + 1
     for g in groups[:6]:
         idx = [i for i, s in enumerate(SS['series']) if s['group'] == g]
-        ch = _line_chart(f"{SS['series'][idx[0]]['emoji']} {SS['series'][idx[0]]['name']}", SS['series'][idx[0]]['units'], 22, 8)
+        s0 = SS['series'][idx[0]]
+        ch = _line_chart(f"{s0['emoji']} {s0['name']}", f"{s0['name']} ({s0['units']})", 22, 8)
+        ch.x_axis.title = 'Date'
         for i in idx:
             ch.add_data(Reference(wh, min_col=i + 2, max_col=i + 2, min_row=3, max_row=endh), titles_from_data=True)
         ch.set_categories(Reference(wh, min_col=1, min_row=4, max_row=endh))

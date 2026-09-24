@@ -70,7 +70,7 @@ def build_figs(S, bd):
         dict(type='scatter', mode='markers', name='Daily peak', x=[d.strftime('%Y-%m-%d 12:00') for d in dmax.index],
              y=_clean(dmax.tolist()), marker=dict(color=ORANGE, size=5), meta='len', visible='legendonly',
              hovertemplate='%{x|%b %d %Y}: peak %{y:.1f} UNIT<extra></extra>'),
-    ], dict(shapes=shapes, yaxis=dict(title='Wave height (UNIT)', rangemode='tozero'),
+    ], dict(shapes=shapes, yaxis=dict(title='Wave height, Hs (UNIT)', rangemode='tozero'), 
             xaxis=dict(rangeslider=dict(visible=True, thickness=0.07), type='date',
                        rangeselector=dict(buttons=[dict(count=7, label='1 wk', step='day', stepmode='backward'),
                                                    dict(count=1, label='1 mo', step='month', stepmode='backward'),
@@ -101,9 +101,9 @@ def build_figs(S, bd):
         type='heatmap', z=z, x=list(range(1, 32)), y=[p.strftime('%b %Y') for p in months], text=txt,
         colorscale=[[i / (len(SEQ) - 1), c] for i, c in enumerate(SEQ)], xgap=2, ygap=2, meta='len',
         zmin=0, zmax=float(np.nanpercentile(d.values, 98)),
-        colorbar=dict(title=dict(text='UNIT', side='right'), thickness=10, len=0.9),
+        colorbar=dict(title=dict(text='Daily average wave height (UNIT)', side='right'), thickness=10, len=0.9),
         hovertemplate='%{text}<br>average wave height <b>%{z:.1f} UNIT</b><extra></extra>')],
-        dict(margin=dict(l=80, r=20, t=20, b=50), yaxis=dict(autorange='reversed', fixedrange=True), xaxis=dict(title='Day of month', dtick=5, fixedrange=True),
+        dict(margin=dict(l=80, r=20, t=20, b=50), yaxis=dict(autorange='reversed', fixedrange=True, title='Month'), xaxis=dict(title='Day of the month', dtick=5, fixedrange=True),
              height=max(260, 34 * len(months) + 90)))
 
     # 3) monthly ---------------------------------------------------------------
@@ -114,14 +114,14 @@ def build_figs(S, bd):
              marker=dict(color=AQUA), meta='len', hovertemplate='%{x}: 90th percentile %{y:.1f} UNIT<extra></extra>'),
         dict(type='bar', name='Biggest', x=mo['label'].tolist(), y=_clean(mo['hs_max'].tolist()), marker=dict(color=ORANGE),
              meta='len', hovertemplate='%{x}: max %{y:.1f} UNIT<extra></extra>'),
-    ], dict(barmode='group', bargap=0.25, bargroupgap=0.08, yaxis=dict(title='Wave height (UNIT)'),
+    ], dict(barmode='group', bargap=0.25, bargroupgap=0.08, yaxis=dict(title='Wave height, Hs (UNIT)'),
             legend=dict(orientation='h', y=1.14, x=1, xanchor='right'), height=380))
     figs['energy'] = _fig([dict(
         type='bar', x=mo['label'].tolist(), y=_clean((mo['energy_mj_m'] / 3.6).tolist()), marker=dict(color=BLUE),
         text=[f"{v / 3.6:,.0f}" for v in mo['energy_mj_m']], textposition='outside', cliponaxis=False,
         customdata=_clean(mo['storms'].tolist()),
         hovertemplate='%{x}<br><b>%{y:,.0f} kWh</b> per metre of coastline<br>%{customdata} storm event(s)<extra></extra>')],
-        dict(yaxis=dict(title='kWh per metre of wave crest'), height=340, showlegend=False))
+        dict(yaxis=dict(title='Wave energy (kWh per metre of coastline)'), height=340, showlegend=False))
 
     # 4) wave rose --------------------------------------------------------------
     ro = S['rose']
@@ -136,7 +136,8 @@ def build_figs(S, bd):
                             marker=dict(color=SEQ[min(i + 1, len(SEQ) - 1)], line=dict(width=1, color='rgba(0,0,0,0)')),
                             hovertemplate='from %{theta}: %{r:.1f}% of the time<extra>' + col + '</extra>'))
     figs['rose'] = _fig(rose_tr, dict(
-        polar=dict(domain=dict(x=[0, 0.62]), angularaxis=dict(direction='clockwise', rotation=90), radialaxis=dict(ticksuffix='%', angle=90)),
+        polar=dict(domain=dict(x=[0, 0.62]), angularaxis=dict(direction='clockwise', rotation=90),
+                   radialaxis=dict(ticksuffix='%', angle=90)),
         legend=dict(title=dict(text='Wave height'), orientation='v', x=0.72, y=0.5, yanchor='middle'), height=420))
 
     # 5) pressure + waves (stacked panels, shared time axis — no dual axis) -----
@@ -149,7 +150,7 @@ def build_figs(S, bd):
         dict(type='scattergl', mode='lines', name='Wave height', x=_ts(H.index), y=_clean(H['hs'].tolist()),
              line=dict(color=BLUE, width=1.1), xaxis='x', yaxis='y', meta='len',
              hovertemplate='%{x|%b %d %H:%M}<br>%{y:.1f} UNIT<extra></extra>'),
-    ], dict(yaxis2=dict(title='Pressure (hPa)', domain=[0.55, 1], anchor='x'), yaxis=dict(title='Waves (UNIT)', domain=[0, 0.45]),
+    ], dict(yaxis2=dict(title='Air pressure (hPa)', domain=[0.55, 1], anchor='x'), yaxis=dict(title='Wave height, Hs (UNIT)', domain=[0, 0.45]),
             showlegend=False, height=460))
 
     # 6) spectrum by season -----------------------------------------------------
@@ -167,14 +168,15 @@ def build_figs(S, bd):
             sub = sp[sp.index.month.isin(ms)]
             if len(sub) < 96:
                 continue
-            mean = sub.mean().values[keep]
+            ok = (sub.notna().mean() >= 0.5).values      # ignore frequency bins most spectra don't have
+            mean = np.where(ok, sub.mean().values, np.nan)[keep]
             tr.append(dict(type='scatter', mode='lines', name=name, x=_clean((1 / f[keep]).tolist()),
                            y=_clean(mean.tolist()), line=dict(color=c, width=2.2, shape='spline'),
                            hovertemplate='%{x:.1f}-second waves: %{y:.3f} m²/Hz<extra>' + name + '</extra>'))
         figs['spectrum'] = _fig(tr, dict(
             xaxis=dict(title='Wave period — seconds between crests (log scale)', type='log',
                        tickvals=[2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25]),
-            yaxis=dict(title='Energy density (m²/Hz)'), legend=dict(orientation='h', y=1.14, x=1, xanchor='right'),
+            yaxis=dict(title='Wave energy density (m²/Hz)'), legend=dict(orientation='h', y=1.14, x=1, xanchor='right'),
             height=380))
 
     # 7) buoy health ------------------------------------------------------------
@@ -185,8 +187,8 @@ def build_figs(S, bd):
              line=dict(color=AQUA, width=2), yaxis='y2', hovertemplate='%{x|%b %d}: %{y:.0f}% humidity<extra></extra>'),
         dict(type='scatter', mode='lines', name='Battery', x=_ts(M.index), y=_clean(M['batt'].tolist()),
              line=dict(color=GREEN, width=2), yaxis='y', hovertemplate='%{x|%b %d}: %{y:.2f} V<extra></extra>'),
-    ], dict(yaxis2=dict(title='Humidity (%)', domain=[0.55, 1], rangemode='tozero', anchor='x'),
-            yaxis=dict(title='Battery (V)', domain=[0, 0.45]), showlegend=False, height=380))
+    ], dict(yaxis2=dict(title='Hull humidity (%)', domain=[0.55, 1], rangemode='tozero', anchor='x'),
+            yaxis=dict(title='Battery voltage (V)', domain=[0, 0.45]), showlegend=False, height=380))
     return figs
 
 
@@ -282,7 +284,7 @@ def build_sensor_figs(SS):
                            radialaxis=dict(ticksuffix='%', angle=90)),
                 legend=dict(title=dict(text='Current speed'), x=0.72, y=0.5, yanchor='middle'), height=380))
             parts.append('<div><h3>🧭 Which way the water flows</h3><div class="card"><div id="sens_rose" class="chart"></div>'
-                         '<p class="t-sub" style="margin:6px 0 0">Direction as reported by the current sensor '
+                         '<p class="t-sub" style="margin:6px 0 0">Distance from the centre = % of hours. Direction as reported by the current sensor '
                          '(most current meters report the direction the water flows <i>toward</i>).</p></div></div>')
     rng = f"{bc.local(pd.DatetimeIndex([SS['first']]))[0]:%b %d, %Y} → {bc.local(pd.DatetimeIndex([SS['last']]))[0]:%b %d, %Y}"
     table = ''.join(f"<tr><td>{s['emoji']} {esc(s['name'])}</td><td>{esc(s['pos_txt'])}</td><td>{esc(s['units'])}</td>"
@@ -340,31 +342,34 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
         top = ev.sort_values('peak_hs', ascending=False).reset_index(drop=True)
         medals = ['🥇', '🥈', '🥉']
         srows = ''.join(
-            f'<tr><td>{medals[i] if i < 3 else i + 1}</td><td>{r.start:%b %d, %Y}</td><td>{r.hours:.0f} h</td>'
+            f'<tr{" class=more hidden" if i >= 10 else ""}><td>{medals[i] if i < 3 else i + 1}</td><td>{r.start:%b %d, %Y}</td><td>{r.hours:.0f} h</td>'
             f'<td><b class="len" data-m="{r.peak_hs}">{bc.ft(r.peak_hs):.1f} ft</b></td>'
             f'<td>{r.tp_at_peak:.0f} s</td><td>{r.dir}</td><td>{r.min_pres:.0f}</td><td>{r.energy_mj_m / 3.6:,.0f}</td></tr>'
             for i, r in enumerate(top.itertuples()))
     else:
         srows = '<tr><td colspan="8">No storm events yet 🎉</td></tr>'
+    n_ev = len(ev)
+    storm_btn = (f'<button class="more-btn" id="storm-more" aria-expanded="false">Show all {n_ev} storms ▾</button>'
+                 if n_ev > 10 else '')
+    storm_lede = (f'The 10 biggest storm events, ranked by peak wave height ({n_ev} in total).' if n_ev > 10
+                  else 'Every storm event, ranked by peak wave height.')
     qc = ''.join(f'<li>{esc(n)}</li>' for n in bc.qc_notes(S))
     if mode == 'web':
         stale_banner = (f'<div class="banner">📡 The buoy hasn\'t reported new waves since <b>{lt["time"]:%b %d, %Y %I:%M %p}</b> '
-                        f'({age_days:.1f} days). It may be offline, or Sofar may be delayed — this page will catch up automatically.</div>'
-                        ) if stale else ''
-        howto = ('<li>This page rebuilds itself <b>every hour</b> on GitHub: it asks Sofar for anything new (waves, spectra, pressure, '
-                 'buoy health and Smart Mooring sensors), saves it to the repository, and republishes.</li>'
-                 f'<li>Nothing to do on your end. To force an update now: <a href="{bc.REPO_URL}/actions">GitHub → Actions</a> → '
-                 '<b>Update buoy dashboard</b> → <b>Run workflow</b>.</li><li>Google Sheets that always stay current: <code>=IMPORTDATA("' + bc.SITE_URL + 'data/daily.csv")</code> '
-                 '(see the downloads at the top).</li>')
+                        f'({age_days:.1f} days). It may be offline for maintenance or a data delay — this page catches up automatically '
+                        'once readings resume.</div>') if stale else ''
+        howto = ('<li>This page updates itself <b>every hour</b> with the buoy\'s newest readings, delivered through Sofar Ocean\'s '
+                 'data service. All times are US Eastern.</li>'
+                 '<li>Want the numbers? Use the download buttons at the top: a spreadsheet plus CSV files (hourly, daily, storms, sensors).</li>'
+                 '<li>Tip: to keep a Google Sheet that stays current on its own, type this into any cell: '
+                 '<code>=IMPORTDATA("' + bc.SITE_URL + 'data/daily.csv")</code></li>')
     else:
-        stale_banner = (f'<div class="banner">📦 These numbers run through <b>{lt["time"]:%b %d, %Y}</b> ({age_days:.0f} days ago). '
-                        'Run <b>Set Up Auto Update</b> once to keep it current automatically, or drop in the newest monthly CSV and '
-                        'double-click <b>Update Buoy Report</b>.</div>') if stale else ''
-        howto = ('<li>Download the newest month from the Spotter dashboard and drop the CSV into the buoy folder.</li>'
-                 '<li>Double-click <b>Update Buoy Report.bat</b> in the buoy folder.</li>'
-                 '<li>Hands-free: <b>Set Up Auto Update.bat</b> once with your Sofar API token.</li>')
-    if notice:
-        stale_banner += f'<div class="banner">{esc(notice)}</div>'
+        stale_banner = (f'<div class="banner">📦 These numbers run through <b>{lt["time"]:%b %d, %Y}</b> '
+                        f'({age_days:.0f} days ago).</div>') if stale else ''
+        howto = '<li>Built from the Spotter data files for this buoy. All times are US Eastern.</li>'
+    if notice:   # friendly wording only — the technical details are kept for the site owner (see maintainer guide)
+        stale_banner += ('<div class="banner">⚠️ Part of the latest hourly update didn\'t come through, so the newest readings may be '
+                         'missing for a little while. It usually sorts itself out on the next update.</div>')
     dl = ''
     if downloads:
         dl = '<div class="chips" style="margin-top:12px">' + ''.join(
@@ -381,7 +386,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
         '%%DOWNLOADS%%': dl,
         '%%FOOTSRC%%': (f'from <a href="{bc.REPO_URL}">{bc.GITHUB_USER}/{bc.GITHUB_REPO}</a> on GitHub' if mode == 'web'
                         else 'by <code>buoy_tools/update_buoy_report.py</code>'), '%%NOW_TILES%%': now_tiles, '%%SEASON_TILES%%': season_tiles,
-        '%%CARDS%%': cards, '%%STORM_ROWS%%': srows, '%%QC%%': qc, '%%STALE%%': stale_banner,
+        '%%CARDS%%': cards, '%%STORM_ROWS%%': srows, '%%STORM_BTN%%': storm_btn, '%%STORM_LEDE%%': storm_lede, '%%QC%%': qc, '%%STALE%%': stale_banner,
         '%%SPOTTER%%': esc(st['spotter']), '%%SITE%%': esc(st['site']),
         '%%LATEST%%': f'{lt["time"]:%A, %b %d %Y at %I:%M %p}',
         '%%GENERATED%%': f'{pd.Timestamp.now(tz=bc.LOCAL_TZ):%b %d, %Y %I:%M %p %Z}',
@@ -449,6 +454,8 @@ th{color:var(--ink2);font-weight:600;font-size:13px}
 .tablewrap{overflow-x:auto}
 details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-top:12px}
 summary{cursor:pointer;font-weight:600}
+tr.hidden{display:none}
+.more-btn{margin-top:10px;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 14px;cursor:pointer;font:inherit;font-size:14px}
 details li{color:var(--ink2);margin:6px 0;font-size:14px}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:14px}
 dt{font-weight:600}dd{margin:0;color:var(--ink2)}
@@ -501,7 +508,7 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
 
   <section class="grid two">
     <div><h2>🧭 Where the waves come from</h2><p class="lede">Each wedge shows how often waves arrive from that direction.</p>
-      <div class="card"><div id="rose" class="chart"></div></div></div>
+      <div class="card"><div id="rose" class="chart"></div><p class="t-sub" style="margin:6px 0 0">Distance from the centre = % of all wave readings from that direction.</p></div></div>
     <div><h2>🎵 The ocean's playlist</h2><p class="lede">Which wave “rhythms” carry the most energy each season. Peaks on the right = long, powerful swell.</p>
       <div class="card"><div id="spectrum" class="chart"></div></div></div>
   </section>
@@ -513,9 +520,9 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
   <section><h2>🌬️ Storms leave a fingerprint</h2><p class="lede">When air pressure (top) drops sharply, the waves (bottom) usually jump. That's a storm passing.</p>
     <div class="card"><div id="pressure" class="chart"></div></div></section>
 
-  <section><h2>🌀 Storm leaderboard</h2><p class="lede">Every storm event, ranked by peak wave height.</p>
+  <section><h2>🌀 Storm leaderboard</h2><p class="lede">%%STORM_LEDE%%</p>
     <div class="card tablewrap"><table><thead><tr><th>Rank</th><th>Started</th><th>Lasted</th><th>Peak waves</th><th>Rhythm</th><th>From</th><th>Lowest pressure (hPa)</th><th>Energy (kWh/m)</th></tr></thead>
-    <tbody>%%STORM_ROWS%%</tbody></table></div></section>
+    <tbody>%%STORM_ROWS%%</tbody></table>%%STORM_BTN%%</div></section>
 
   <section><h2>🔧 Buoy health</h2><p class="lede">Battery (bottom) and the humidity inside the hull (top). Humidity creeping upward can mean moisture is getting in.</p>
     <div class="card"><div id="health" class="chart"></div></div></section>
@@ -530,7 +537,7 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
       <dt>Wave energy</dt><dd>How much energy the waves carried past each metre of coastline. 1 kWh ≈ running a microwave for an hour.</dd>
       <dt>Storm event</dt><dd>%%STORM_DEF%%.</dd>
     </dl></details>
-    <details><summary>🔄 How this page updates</summary><ul>%%HOWTO%%</ul></details>
+    <details><summary>ℹ️ About this data</summary><ul>%%HOWTO%%</ul></details>
   </section>
   <footer>Generated %%GENERATED%% %%FOOTSRC%%. Data: Sofar Ocean Spotter %%SPOTTER%%, University of New England.</footer>
 </div>
@@ -549,11 +556,16 @@ function themed(layout){
   const L = Object.assign({}, layout, {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
     font:{family:'system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif', color:ink, size:13},
     margin:layout.margin||{l:60,r:20,t:30,b:50}, hoverlabel:{font:{size:13}}});
-  for (const k of Object.keys(L)) if (/^[xy]axis\d*$/.test(k)) L[k]=Object.assign({gridcolor:grid, zerolinecolor:grid, linecolor:grid}, L[k]);
+  for (const k of Object.keys(L)) if (/^[xy]axis\d*$/.test(k)) {
+    L[k]=Object.assign({gridcolor:grid, zerolinecolor:grid, linecolor:grid}, L[k]);
+    if (typeof L[k].title === 'string') L[k].title = {text: L[k].title, standoff: 10};
+    if (L[k].title) L[k].title.font = Object.assign({size: 13, color: ink}, L[k].title.font || {});
+  }
   if (!L.xaxis) L.xaxis={gridcolor:grid}; if(!L.yaxis) L.yaxis={gridcolor:grid};
   if (L.polar){L.polar=Object.assign({bgcolor:'rgba(0,0,0,0)'},L.polar);
     L.polar.angularaxis=Object.assign({gridcolor:grid,linecolor:grid},L.polar.angularaxis);
-    L.polar.radialaxis=Object.assign({gridcolor:grid,linecolor:grid},L.polar.radialaxis);}
+    L.polar.radialaxis=Object.assign({gridcolor:grid,linecolor:grid},L.polar.radialaxis);
+    if (typeof L.polar.radialaxis.title === 'string') L.polar.radialaxis.title = {text: L.polar.radialaxis.title, font:{size:12, color:ink}};}
   if (L.xaxis && L.xaxis.rangeselector) L.xaxis.rangeselector=Object.assign({bgcolor:css('--chip'),activecolor:css('--chip2'),font:{color:ink}},L.xaxis.rangeselector);
   return L;
 }
@@ -584,6 +596,12 @@ document.getElementById('theme').onclick=()=>{const r=document.documentElement;
 try{const t=localStorage.getItem('buoy-theme'); if(t) document.documentElement.dataset.theme=t;}catch(e){}
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
 render();
+const sm=document.getElementById('storm-more');
+if (sm) sm.onclick=()=>{const open=sm.getAttribute('aria-expanded')==='true';
+  document.querySelectorAll('tr.more').forEach(r=>r.classList.toggle('hidden',open));
+  sm.setAttribute('aria-expanded',!open);
+  sm.textContent = open? sm.dataset.all : 'Show top 10 only ▴';};
+if (sm) sm.dataset.all = sm.textContent;
 </script>
 </body></html>
 """
