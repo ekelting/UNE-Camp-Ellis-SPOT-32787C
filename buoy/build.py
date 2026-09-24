@@ -37,7 +37,7 @@ def main():
     bd = bc.load(a.data, verbose=False, cache_dir=os.path.join(ROOT, '.cache'))
     S = bc.summary(bd)
     print('🧪 reading Smart Mooring sensor data ...')
-    SS = sn.build(sn.load(a.data))
+    SS = sn.build(sn.load(a.data, since=bd.qc.get('settled_utc')))
     print(f"   {len(SS.get('series', []))} sensor channels" if SS.get('has') else '   none yet')
 
     xlsx = f'{bc.FILE_STEM}_Summary.xlsx'

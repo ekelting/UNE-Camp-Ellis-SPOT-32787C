@@ -16,12 +16,7 @@ BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = (
     '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948')
 SEQ = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b']
 
-VIBES = [(0.3, '😴', 'Glassy', 'Flat, lake-like water.'),
-         (0.6, '🙂', 'Gentle', 'Small, easy waves.'),
-         (1.0, '🌊', 'Lively', 'Noticeable waves rolling in.'),
-         (1.5, '💪', 'Rough', 'Big for this bay — whitecaps likely.'),
-         (2.5, '⚠️', 'Stormy', 'Storm waves — erosion weather.'),
-         (99, '🌀', 'Huge storm', 'Among the biggest seas this buoy sees.')]
+VIBES = bc.VIBES
 
 
 def vibe(hs):
@@ -43,6 +38,9 @@ def _clean(v):
 
 def _ts(idx):
     return [t.strftime('%Y-%m-%d %H:%M') for t in idx]
+
+
+MORE_ROW = ' class="more hidden"'
 
 
 def esc_js(t):
@@ -368,7 +366,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
         tile('📡', 'Wave readings', f'{st["n_wave_obs"]:,}', f'{st["coverage_pct"]:.0f}% of hours covered'),
         tile('🏆', 'Biggest waves', f'{bc.ft(st["hs_max"]):.1f} ft', f'{st["hs_max_time"]:%b %d, %Y}', st['hs_max']),
         tile('🌀', 'Storm events', f'{st["n_storms"]}', f'{st["storm_hours"]:.0f} stormy hours'),
-        tile('😴', 'Calm time', f'{st["pct_calm"]:.0f}%', 'waves under 1 ft'),
+        tile(st['top_vibe'][0], 'Usual wave vibe', st['top_vibe'][1], f'{st["top_vibe"][2]:.0f}% of the time'),
         tile('🏄', 'Waves ridden', f'{st["n_waves"] / 1e6:.1f} M', 'estimated, by the buoy itself'),
     ])
     cards = ''.join(f'<div class="card insight"><div class="i-emoji">{em}</div><div><h4>{esc(h)}</h4><p>{esc(t)}</p></div></div>'
@@ -377,7 +375,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
         top = ev.sort_values('peak_hs', ascending=False).reset_index(drop=True)
         medals = ['🥇', '🥈', '🥉']
         srows = ''.join(
-            f'<tr{" class=more hidden" if i >= 10 else ""}><td>{medals[i] if i < 3 else i + 1}</td><td>{r.start:%b %d, %Y}</td><td>{r.hours:.0f} h</td>'
+            f'<tr{MORE_ROW if i >= 10 else ""}><td>{medals[i] if i < 3 else i + 1}</td><td>{r.start:%b %d, %Y}</td><td>{r.hours:.0f} h</td>'
             f'<td><b class="len" data-m="{r.peak_hs}">{bc.ft(r.peak_hs):.1f} ft</b></td>'
             f'<td>{r.tp_at_peak:.0f} s</td><td>{r.dir}</td><td>{r.min_pres:.0f}</td><td>{r.energy_mj_m / 3.6:,.0f}</td></tr>'
             for i, r in enumerate(top.itertuples()))
@@ -422,6 +420,24 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
                                   if depth else 'not recorded yet'),
                 ('🚀 In the water since', f'{pd.Timestamp(bc.CFG.get("deployed_utc", st["first"])).tz_convert(bc.LOCAL_TZ):%B %d, %Y}')]
         where = ''.join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in rows)
+    hh = bd.met['humid'].dropna()
+    health_note = ''
+    if len(hh):
+        days = pd.date_range(bc.local(pd.DatetimeIndex([bd.waves.index.min()]))[0].normalize(),
+                             bc.local(pd.DatetimeIndex([bd.met.index.max()]))[0].normalize(), freq='D')
+        have = hh.copy()
+        have.index = bc.local(have.index)
+        got = have.resample('1D').count().reindex(days, fill_value=0) > 0
+        wv = bd.waves['hs'].copy()
+        wv.index = bc.local(wv.index)
+        waves_on = wv.resample('1D').count().reindex(days, fill_value=0) > 0
+        miss = waves_on & ~got                  # the buoy was reporting waves but we have no health readings
+        runs = (miss != miss.shift()).cumsum()
+        gaps = [(g.index[0], g.index[-1]) for _, g in miss[miss].groupby(runs[miss]) if len(g) >= 7]
+        if gaps:
+            span = '; '.join(f'{a:%b %d} – {b:%b %d, %Y}' for a, b in gaps)
+            health_note = (' <i>Battery and humidity history only comes in the buoy\'s monthly data files, so there is no record for '
+                           f'{span}. New readings are logged every hour.</i>')
     sisters = ''.join(f'<a class="btn" href="{esc(x["url"])}">🔀 {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
     if plotly_src:
         plotly_tag = f'<script src="{plotly_src}"></script>'
@@ -432,7 +448,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
     page = TEMPLATE
     for k, v in {
         '%%PLOTLY_TAG%%': plotly_tag, '%%FIGS%%': fig_json, '%%SENSORS%%': sensor_block, '%%HOWTO%%': howto,
-        '%%DOWNLOADS%%': dl, '%%WHERE%%': where, '%%SISTERS%%': sisters,
+        '%%DOWNLOADS%%': dl, '%%WHERE%%': where, '%%HEALTH_NOTE%%': health_note, '%%SISTERS%%': sisters,
         '%%FOOTSRC%%': (f'from <a href="{bc.REPO_URL}">{bc.GITHUB_USER}/{bc.GITHUB_REPO}</a> on GitHub' if mode == 'web'
                         else 'by <code>buoy_tools/update_buoy_report.py</code>'), '%%NOW_TILES%%': now_tiles, '%%SEASON_TILES%%': season_tiles,
         '%%CARDS%%': cards, '%%STORM_ROWS%%': srows, '%%STORM_BTN%%': storm_btn, '%%STORM_LEDE%%': storm_lede, '%%QC%%': qc, '%%STALE%%': stale_banner,
@@ -473,6 +489,9 @@ header p{margin:6px 0 0;opacity:.88}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .btn{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:999px;padding:6px 14px;cursor:pointer;font:inherit;font-size:14px}
 a.btn{text-decoration:none;display:inline-block}
+.maptools{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px}
+.seg{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;font:inherit;font-size:13px}
+.seg[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
 .kv:last-child{border-bottom:0}.kv span{color:var(--ink2)}.kv b{text-align:right}
 .btn[aria-pressed="true"]{background:#fff;color:#0d366b;font-weight:600}
@@ -540,7 +559,10 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
   </section>
 
   <section><h2>📍 Where is the buoy?</h2><p class="lede">Updates every hour. The orange dot is the buoy's latest position; the line is where it has drifted around its anchor over the last week.</p>
-    <div class="grid two"><div class="card" style="padding:0;overflow:hidden"><div id="map" class="chart" style="min-height:380px"></div></div>
+    <div class="grid two"><div class="card" style="padding:0;overflow:hidden">
+      <div class="maptools"><button class="seg" data-map="street" aria-pressed="true">🗺️ Street map</button><button class="seg" data-map="chart" aria-pressed="false">⚓ Nautical chart (depths &amp; contours)</button></div>
+      <div id="map" class="chart" style="min-height:380px"></div>
+      <p class="t-sub" style="margin:6px 12px 10px">Nautical chart: NOAA Office of Coast Survey — depths at low tide, in the units you pick at the top. Not for navigation.</p></div>
     <div class="card">%%WHERE%%</div></div></section>
 
   <section><h2>📊 The season so far</h2><p class="lede">Big-picture numbers since the buoy went in the water.</p>
@@ -581,7 +603,7 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
     <div class="card tablewrap"><table><thead><tr><th>Rank</th><th>Started</th><th>Lasted</th><th>Peak waves</th><th>Rhythm</th><th>From</th><th>Lowest pressure (hPa)</th><th>Energy (kWh/m)</th></tr></thead>
     <tbody>%%STORM_ROWS%%</tbody></table>%%STORM_BTN%%</div></section>
 
-  <section><h2>🔧 Buoy health</h2><p class="lede">Battery (bottom) and the humidity inside the hull (top). Humidity creeping upward can mean moisture is getting in.</p>
+  <section><h2>🔧 Buoy health</h2><p class="lede">Battery (bottom) and the humidity inside the hull (top). Humidity creeping upward can mean moisture is getting in.%%HEALTH_NOTE%%</p>
     <div class="card"><div id="health" class="chart"></div></div></section>
 
   <section>
@@ -632,6 +654,7 @@ function themed(layout){
 }
 function render(){
   const k = unit==='ft'? M2FT:1;
+  let chartLayers = [];
   for (const id of Object.keys(ORIG)){
     const el=document.getElementById(id); if(!el) continue;
     const f=JSON.parse(JSON.stringify(ORIG[id]));
@@ -640,9 +663,24 @@ function render(){
       t.hovertemplate=sub(t.hovertemplate,unit);
       if (t.colorbar&&t.colorbar.title) t.colorbar.title.text=sub(t.colorbar.title.text,unit);
     }
-    const L=JSON.parse(sub(JSON.stringify(f.layout),unit));
-    Plotly.react(el,f.data,themed(L),{responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+    const L=themed(JSON.parse(sub(JSON.stringify(f.layout),unit)));
+    if (L.map && mapMode==='chart') {           // NOAA nautical chart: soundings + depth contours, in the page's units
+      const dp=encodeURIComponent(JSON.stringify({ECDISParameters:{DynamicParameters:{Parameter:[{name:'DisplayDepthUnits',value: unit==='ft'?2:1}]}}}));
+      L.map.style='white-bg';
+      chartLayers=[{sourcetype:'raster', below:'traces', sourceattribution:'NOAA Office of Coast Survey — not for navigation',
+        source:['https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer?service=WMS&request=GetMap&version=1.3.0&layers=0,1,2,3,4,5,6,7&styles=&format=image/png&transparent=false&crs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}&display_params='+dp]}];
+    }
+    if (L.polar && el.clientWidth < 560) {      // narrow screens: legend underneath the rose
+      L.height=640; L.polar.domain={x:[0,1],y:[0.42,1]};
+      L.legend=Object.assign({},L.legend,{orientation:'v',x:0,y:0,xanchor:'left',yanchor:'bottom'}); }
+    try {
+      const p = Plotly.react(el,f.data,L,{responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']});
+      // raster layers must be added after the new base style has loaded, or MapLibre drops them
+      if (L.map) { const lay = (mapMode==='chart') ? chartLayers : [];
+        Promise.resolve(p).then(()=>setTimeout(()=>Plotly.relayout(el, {'map.layers': lay}), 150)); }
+    } catch(e) { console.error('chart '+id, e); }
   }
+  document.querySelectorAll('[data-map]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.map===mapMode));
   document.querySelectorAll('.len').forEach(el=>{const m=parseFloat(el.dataset.m); if(isNaN(m))return;
     const v = unit==='ft'? m*M2FT : m; const lt = el.dataset.lt? '<':'';
     el.textContent = lt + (unit==='ft'? v.toFixed(el.dataset.lt?0:1)+' ft' : v.toFixed(el.dataset.lt?1:2)+' m');});
@@ -656,13 +694,16 @@ document.getElementById('theme').onclick=()=>{const r=document.documentElement;
   r.dataset.theme = dark? 'light':'dark'; try{localStorage.setItem('buoy-theme',r.dataset.theme)}catch(e){} render();};
 try{const t=localStorage.getItem('buoy-theme'); if(t) document.documentElement.dataset.theme=t;}catch(e){}
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
-render();
 const sm=document.getElementById('storm-more');
-if (sm) sm.onclick=()=>{const open=sm.getAttribute('aria-expanded')==='true';
-  document.querySelectorAll('tr.more').forEach(r=>r.classList.toggle('hidden',open));
-  sm.setAttribute('aria-expanded',!open);
-  sm.textContent = open? sm.dataset.all : 'Show top 10 only ▴';};
-if (sm) sm.dataset.all = sm.textContent;
+if (sm) { sm.dataset.all = sm.textContent;
+  sm.onclick=()=>{const open=sm.getAttribute('aria-expanded')==='true';
+    document.querySelectorAll('tr.more').forEach(r=>{r.classList.toggle('hidden',open); r.hidden=open;});
+    sm.setAttribute('aria-expanded',String(!open));
+    sm.textContent = open? sm.dataset.all : 'Show top 10 only ▴';}; }
+let mapMode='street';
+try{ mapMode = localStorage.getItem('buoy-map') || 'street'; }catch(e){}
+document.querySelectorAll('[data-map]').forEach(b=>b.onclick=()=>{mapMode=b.dataset.map; try{localStorage.setItem('buoy-map',mapMode)}catch(e){} render();});
+render();
 </script>
 </body></html>
 """

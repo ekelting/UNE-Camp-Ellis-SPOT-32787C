@@ -78,7 +78,7 @@ def instrument(dtype):
     return 'sensor'
 
 
-def load(data_root):
+def load(data_root, since=None):
     """Read API files (data/sensors/**/sensors_*.csv) and Spotter-dashboard exports (*smartMooring-history*.csv)."""
     pats = ['sensors_*.csv', '*smartMooring*.csv', '*smartMooring*.csv.gz', '*smartmooring*.csv', '*smartmooring*.csv.gz']
     files = sorted({f for p in pats for f in glob.glob(os.path.join(data_root, '**', p), recursive=True)})
@@ -97,7 +97,10 @@ def load(data_root):
     d['value'] = pd.to_numeric(d['value'], errors='coerce')
     d['t'] = pd.to_datetime(d['timestamp'], utc=True, errors='coerce', format='mixed')
     d = d.dropna(subset=['t', 'value'])
-    d = d[d['t'] >= pd.Timestamp(SETTLED_UTC)]
+    cut = pd.Timestamp(SETTLED_UTC)
+    if since is not None:                     # auto-detected: buoy settled on its mooring (+ warm-up time)
+        cut = max(cut, pd.Timestamp(since))
+    d = d[d['t'] >= cut]
     for c in ['sensorPosition', 'data_type_name', 'unit_type', 'units']:
         d[c] = d[c].fillna('').astype(str).str.replace(r'\.0$', '', regex=True)
     # the API adds an encoding suffix ("…_mean_13bits") that the dashboard CSV export doesn't — make them match

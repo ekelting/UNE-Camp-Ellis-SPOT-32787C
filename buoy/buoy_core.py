@@ -44,6 +44,14 @@ STORM_HS_M = 1.0          # a "storm event" = hourly Hs at/above this ...
 STORM_MIN_HOURS = 6       # ... for at least this many hours
 STORM_MERGE_GAP_H = 6     # dips shorter than this are merged into one event
 CALM_HS_M = 0.3           # "glassy" threshold used for calm streaks
+SETTLE_HOURS = 6          # after the buoy first stays on its mooring, wait this long before trusting sensor readings
+# the "wave vibe" scale used on the dashboard (upper limit of Hs in metres, emoji, name, description)
+VIBES = [(0.3, '😴', 'Glassy', 'Flat, lake-like water.'),
+         (0.6, '🙂', 'Gentle', 'Small, easy waves.'),
+         (1.0, '🌊', 'Lively', 'Noticeable waves rolling in.'),
+         (1.5, '💪', 'Rough', 'Big for this bay — whitecaps likely.'),
+         (2.5, '⚠️', 'Stormy', 'Storm waves — erosion weather.'),
+         (99, '🌀', 'Huge storm', 'Among the biggest seas this buoy sees.')]
 OFF_STATION_M = 150       # positions farther than this from the mooring = deployment/transit, dropped
 RHO_G2_64PI = 1025 * 9.81 ** 2 / (64 * math.pi) / 1000  # kW/m per (m^2 s) = 0.49
 
@@ -208,7 +216,15 @@ def clean(raw, spec, files):
     off = raw['dist_m'] > OFF_STATION_M
     qc['off_station_rows'] = int(off.sum())
     qc['mooring_lat'], qc['mooring_lon'] = float(lat0), float(lon0)
+    # when did the buoy settle on its mooring? = start of the first 12 h stretch with every fix on station
+    pos = raw.dropna(subset=['lat']).groupby('t')['dist_m'].max().sort_index()
+    onh = (pos <= OFF_STATION_M).resample('1h').min().dropna()
+    run = onh.astype(int).groupby((onh != onh.shift()).cumsum()).cumsum()
+    first_ok = run[(onh == 1) & (run >= 12)]
+    settled = (first_ok.index[0] - pd.Timedelta(hours=11)) if len(first_ok) else pos.index.min()
+    qc['settled_utc'] = settled + pd.Timedelta(hours=SETTLE_HOURS)
     raw = raw[~off]
+    raw = raw[raw['t'] >= settled]
 
     # --- wave rows: prefer 15-min "hdr" estimates, fill gaps with 30-min onboard ones
     w = raw.dropna(subset=['hs'])
@@ -226,6 +242,9 @@ def clean(raw, spec, files):
     med = waves['hs'].rolling(5, center=True, min_periods=3).median()
     spike = ((waves['hs'] > 1.6 * med) & (waves['hs'] - med > 0.3)) | \
             ((waves['hs'] < 0.4 * med) & (med - waves['hs'] > 0.3))
+    # short bursts (2–3 readings in a row) that a 5-point median can't see: compare with a ~3-hour window
+    med13 = waves['hs'].rolling(13, center=True, min_periods=7).median()
+    spike |= (waves['hs'] > 2.2 * med13) & (waves['hs'] - med13 > 0.8)
     qc['spikes_removed'] = int(spike.sum())
     qc['spike_examples'] = [(str(t.tz_convert(LOCAL_TZ).strftime('%Y-%m-%d %H:%M')), round(v, 2))
                             for t, v in waves.loc[spike, 'hs'].nlargest(5).items()]
@@ -433,7 +452,15 @@ def summary(bd):
     n_waves = (w['hs'].resample('1h').count().gt(0) * 3600 / hr['tm']).sum()
     dy_ok = dy[dy['n_waves_obs'] >= 24]
     mf = mo[~mo['partial']]
+    hs_h = hr['hs'].dropna()
+    vib_counts = []
+    lo = 0.0
+    for lim, emo, name, _ in VIBES:
+        vib_counts.append((emo, name, 100 * ((hs_h >= lo) & (hs_h < lim)).mean() if len(hs_h) else 0.0, lo, lim))
+        lo = lim
+    top_vibe = max(vib_counts, key=lambda v: v[2])
     stats = dict(
+        vibes=vib_counts, top_vibe=top_vibe,
         spotter=SPOTTER_ID, site=SITE_NAME,
         first=local(pd.DatetimeIndex([w.index[0]]))[0], last=last_t,
         days=total_hours / 24, coverage_pct=100 * covered_hours / total_hours,
@@ -495,7 +522,8 @@ def insights(S):
                 f"The months with the most time spent above 1 m (3.3 ft) were {', '.join(rough)}."))
 
     # direction
-    out.append(("🧭", f"Waves almost always arrive from the {st['dir_mode']}",
+    how = 'almost always' if st['dir_mode_pct'] >= 65 else ('mostly' if st['dir_mode_pct'] >= 40 else 'most often')
+    out.append(("🧭", f"Waves {how} arrive from the {st['dir_mode']}",
                 f"{st['dir_mode_pct']:.0f}% of all wave readings came from the {st['dir_mode']} sector, and the energy-weighted average "
                 f"direction is {st['dir_energy']:.0f}° ({compass(st['dir_energy'])}). "
                 + (f"Every one of the {len(ev)} storm events came from the {', '.join(sorted(ev['dir'].unique()))}. " if len(ev) else "")
@@ -526,9 +554,14 @@ def insights(S):
                 f"Average peak period: {st['tp_mean']:.1f} s."))
 
     # calm
-    out.append(("😴", f"It's calm a lot — {st['pct_calm']:.0f}% of the time under {CALM_HS_M} m (1 ft)",
-                f"The longest calm stretch lasted {st['calm_streak_h'] / 24:.1f} days, ending {st['calm_streak_end']:%b %d, %Y}. "
-                f"Waves topped 1 m only {st['pct_over_1m']:.1f}% of the time."))
+    emo, name, pct, lo, hi = st['top_vibe']
+    mix = ' · '.join(f"{e} {n} {p:.0f}%" for e, n, p, _, _ in st['vibes'] if p >= 0.5)
+    rng = (f"under {ft(hi):.0f} ft ({hi:g} m)" if lo == 0 else
+           f"{ft(lo):.0f}–{ft(hi):.0f} ft ({lo:g}–{hi:g} m)" if hi < 99 else f"over {ft(lo):.0f} ft ({lo:g} m)")
+    streak = (f" The longest glassy stretch (waves under {ft(CALM_HS_M):.0f} ft) lasted {st['calm_streak_h'] / 24:.1f} days, "
+              f"ending {st['calm_streak_end']:%b %d, %Y}." if st['calm_streak_h'] >= 24 else '')
+    out.append((emo, f"The usual wave vibe here: {name} — {pct:.0f}% of the time",
+                f"Waves were {rng} for {pct:.0f}% of hours. The full mix: {mix}.{streak}"))
 
     # pressure
     out.append(("🌡️", f"Lowest pressure: {st['pres_min']:.1f} hPa",
