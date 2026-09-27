@@ -1,0 +1,29 @@
+timestamp,sensorPosition,data_type_name,unit_type,units,value,latitude,longitude,configuration_checksum
+2026-09-27T00:05:11.000Z,1,bm_soft_temperature_mean_13bits,temperature,°C,15.57,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,3,bm_do_saturation_pct_mean_18bits,percentage,%,101.20100000000001,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,3,bm_do_salinity_mean_13bits,mass_ratio,parts per thousand,35.0,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,3,bm_do_quality_mean_10bits,quality_ratio,unitless,0.908,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,3,bm_do_mg_per_l_mean_17bits,mass_concentration,mg/L,8.145,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_temperature_mean_13bits,temperature,°C,15.530000000000001,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_std_tilt_mean_8bits,tilt,rad,0.08,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,3,bm_do_temperature_mean_16bits,temperature,°C,15.521,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_direction_circ_std_13bits,direction,rad,0.188,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_direction_circ_mean_13bits,direction,rad,5.21,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_abs_tilt_mean_8bits,tilt,rad,0.31,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_abs_speed_std_15bits,speed,cm/s,3.87,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_abs_speed_mean_15bits,speed,cm/s,33.44,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:05:11.000Z,2,aanderaa_reading_count_10bits,reading_count,count,5.0,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,3,bm_do_salinity_mean_13bits,mass_ratio,parts per thousand,35.0,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,3,bm_do_quality_mean_10bits,quality_ratio,unitless,0.908,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,3,bm_do_mg_per_l_mean_17bits,mass_concentration,mg/L,8.091,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_temperature_mean_13bits,temperature,°C,15.52,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_std_tilt_mean_8bits,tilt,rad,0.07,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_reading_count_10bits,reading_count,count,5.0,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_abs_tilt_mean_8bits,tilt,rad,0.28,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_direction_circ_mean_13bits,direction,rad,5.204,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_abs_speed_std_15bits,speed,cm/s,1.54,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_abs_speed_mean_15bits,speed,cm/s,23.07,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,1,bm_soft_temperature_mean_13bits,temperature,°C,15.559999999999999,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,3,bm_do_saturation_pct_mean_18bits,percentage,%,100.468,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,2,aanderaa_direction_circ_std_13bits,direction,rad,0.025,43.4729333,-70.36005,0x5e54227b
+2026-09-27T00:35:11.000Z,3,bm_do_temperature_mean_16bits,temperature,°C,15.513,43.4729333,-70.36005,0x5e54227b
