@@ -40,4 +40,6 @@ The dashboard shows:
 
 The data comes from [Sofar Ocean](https://www.sofarocean.com/) Spotter SPOT-32787C with Smart Mooring sensors, deployed by the University of New England.
 
-**Sister sites:** [Biddeford Pool wave buoy](https://ekelting.github.io/UNE-Biddeford-Pool-SPOT-32905C/) · [Saco River Estuary (BB1.23)](https://ekelting.github.io/UNE-BlueSonde-BB1.23/) · [Water-quality buoy BB1.12](https://ekelting.github.io/UNE-BlueSonde-BB1.12/) · [Water-quality buoy BB1.47](https://ekelting.github.io/UNE-BlueSonde-BB1.47/) · [Water-quality buoy BB1.48](https://ekelting.github.io/UNE-BlueSonde-BB1.48/)
+**Sister sites:** [Biddeford Pool](https://ekelting.github.io/UNE-Biddeford-Pool-SPOT-32905C/) · [Saco Bay](https://ekelting.github.io/UNE-BlueSonde-BB1.23/) · [Saco River Estuary](https://ekelting.github.io/UNE-BlueSonde-BB1.12/) · [Ferry Beach](https://ekelting.github.io/UNE-BlueSonde-BB1.47/) · [Goose Rocks Beach](https://ekelting.github.io/UNE-BlueSonde-BB1.48/)
+
+**All UNE buoys on one page:** <https://ekelting.github.io/UNE-Marine-Monitoring-Network/>

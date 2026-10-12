@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 import buoy_core as bc
+import mapjs
 
 # palette (validated reference palette from the dataviz method)
 BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = (
@@ -180,9 +181,10 @@ def build_figs(S, bd):
                 tr.append(dict(type='scattermap', mode='markers+text', name=sis['label'], lat=[sis['lat']], lon=[sis['lon']],
                                text=[sis['label']], textposition='top center', marker=dict(size=10, color='#8a8984'),
                                hovertemplate=esc_js(sis['label']) + '<extra></extra>'))
-        figs['map'] = _fig(tr, dict(map=dict(center=dict(lat=lat0, lon=lon0), zoom=12.2),
-                                    legend=dict(orientation='h', y=0, x=0, yanchor='bottom', bgcolor='rgba(255,255,255,0.75)'),
-                                    margin=dict(l=0, r=0, t=0, b=0), height=380))
+        figs['_mapdata'] = mapjs.mapdata(
+            dict(lat=float(last['lat']), lon=float(last['lon']), kind='wave', label=bc.SITE_SHORT,
+                 sub=f'Sofar Spotter {bc.SPOTTER_ID} — latest position'),
+            bc.SISTER_SITES, track=[[round(a_, 5), round(b_, 5)] for a_, b_ in zip(wk['lat'], wk['lon'])], anchor=[lat0, lon0])
 
     # 6) spectrum by season -----------------------------------------------------
     sp = bd.spec
@@ -446,15 +448,18 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
             span = '; '.join(f'{a:%b %d} – {b:%b %d, %Y}' for a, b in gaps)
             health_note = (' <i>Battery and humidity history only comes in the buoy\'s monthly data files, so there is no record for '
                            f'{span}. New readings are logged every hour.</i>')
-    sisters = ''.join(f'<a class="btn" href="{esc(x["url"])}">🔀 {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
+    sisters = ''.join(f'<a class="btn" href="{esc(x["url"])}">{"🌊" if mapjs.kind_of(x) == "wave" else "🧪"} {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
     if plotly_src:
         plotly_tag = f'<script src="{plotly_src}"></script>'
     else:
         plotly_tag = f'<script>{plotly_js}</script>'
 
+    mapdata = figs.pop('_mapdata', None) or mapjs.mapdata(dict(lat=bc.CFG.get('mooring_lat'), lon=bc.CFG.get('mooring_lon'), kind='wave',
+                                                               label=bc.SITE_SHORT), bc.SISTER_SITES)
     fig_json = json.dumps(figs, default=str, ensure_ascii=False)
     page = TEMPLATE
     for k, v in {
+        '%%MAPHEAD%%': mapjs.HEAD, '%%MAPCSS%%': mapjs.CSS, '%%MAPJS%%': mapjs.JS.replace('%%MAPDATA%%', mapdata), '%%LEGEND%%': mapjs.LEGEND,
         '%%PLOTLY_TAG%%': plotly_tag, '%%FIGS%%': fig_json, '%%SENSORS%%': sensor_block, '%%HOWTO%%': howto,
         '%%DOWNLOADS%%': dl, '%%TIDES%%': json.dumps(tides or []), '%%TIDE_ST%%': json.dumps(str(bc.CFG.get('tide_station') or '')),
         '%%TZ%%': json.dumps(str(bc.LOCAL_TZ)), '%%WHERE%%': where, '%%HEALTH_NOTE%%': health_note, '%%SISTERS%%': sisters,
@@ -479,6 +484,7 @@ TEMPLATE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%%SHORT%% Buoy</title>
+%%MAPHEAD%%
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <style>
 :root{--bg:#f5f8fa;--card:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#8a8984;--line:#e3e8ec;--accent:#1c5cab;
@@ -542,6 +548,7 @@ dt{font-weight:600}dd{margin:0;color:var(--ink2)}
 footer{color:var(--muted);font-size:13px;margin-top:36px}
 a{color:var(--accent)}
 code{background:var(--chip);padding:1px 5px;border-radius:5px}
+%%MAPCSS%%
 @media (max-width:560px){dl{grid-template-columns:1fr}.t-value{font-size:24px}}
 </style></head>
 <body>
@@ -567,10 +574,10 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
     %%STALE%%
   </section>
 
-  <section><h2>📍 Where is the buoy?</h2><p class="lede">Updates every hour. The orange dot is the buoy's latest position; the line is where it has drifted around its anchor over the last week.</p>
+  <section><h2>📍 Where is the buoy?</h2><p class="lede">Updates every hour. This buoy is highlighted in orange, at its latest position; the blue line is where it has drifted around its anchor (⚓) over the last week. The others are UNE's nearby wave buoys (yellow) and water-quality buoys (orange floats) — click one to visit its page.</p>
     <div class="grid two"><div class="card mapcard" style="padding:0;overflow:hidden">
       <div class="maptools"><button class="seg" data-map="street" aria-pressed="true">🗺️ Street map</button><button class="seg" data-map="chart" aria-pressed="false">⚓ Nautical chart (depths &amp; contours)</button></div>
-      <div id="map" class="chart" style="min-height:380px"></div>
+      <div id="map"></div>%%LEGEND%%
       <p class="t-sub" style="margin:6px 12px 10px">Nautical chart: NOAA Office of Coast Survey — depths at low tide, in the units you pick at the top. Not for navigation.</p></div>
     <div class="card wherecard">%%WHERE%%</div></div></section>
 
@@ -633,6 +640,8 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
 %%PLOTLY_TAG%%
 <script>
 const FIGS = %%FIGS%%;
+function unitKey(){ return unit==='m' ? 'metric' : 'us'; }
+%%MAPJS%%
 const M2FT = 3.28084;
 let unit = 'ft';
 try { unit = localStorage.getItem('buoy-unit') || 'ft'; } catch (e) {}
@@ -745,6 +754,7 @@ function render(){
   document.querySelectorAll('.len').forEach(el=>{const m=parseFloat(el.dataset.m); if(isNaN(m))return;
     const v = unit==='ft'? m*M2FT : m; const lt = el.dataset.lt? '<':'';
     el.textContent = lt + (unit==='ft'? v.toFixed(el.dataset.lt?0:1)+' ft' : v.toFixed(el.dataset.lt?1:2)+' m');});
+  try { renderMap(); } catch(e) { console.error('map', e); }
   renderTide();
   document.getElementById('u-ft').setAttribute('aria-pressed', unit==='ft');
   document.getElementById('u-m').setAttribute('aria-pressed', unit==='m');

@@ -15,31 +15,36 @@
   "river_note": "near the Saco River mouth the water can be fresher",
   "sister_sites": [
     {
-      "label": "Biddeford Pool wave buoy",
+      "label": "Biddeford Pool",
+      "kind": "wave",
       "url": "https://ekelting.github.io/UNE-Biddeford-Pool-SPOT-32905C/",
       "lat": 43.43761,
       "lon": -70.34923
     },
     {
-      "label": "Saco River Estuary (BB1.23)",
+      "label": "Saco Bay",
+      "kind": "wq",
       "url": "https://ekelting.github.io/UNE-BlueSonde-BB1.23/",
       "lat": 43.455593,
       "lon": -70.317699
     },
     {
-      "label": "Water-quality buoy BB1.12",
+      "label": "Saco River Estuary",
+      "kind": "wq",
       "url": "https://ekelting.github.io/UNE-BlueSonde-BB1.12/",
       "lat": 43.460893,
       "lon": -70.389691
     },
     {
-      "label": "Water-quality buoy BB1.47",
+      "label": "Ferry Beach",
+      "kind": "wq",
       "url": "https://ekelting.github.io/UNE-BlueSonde-BB1.47/",
       "lat": 43.497213,
       "lon": -70.379113
     },
     {
-      "label": "Water-quality buoy BB1.48",
+      "label": "Goose Rocks Beach",
+      "kind": "wq",
       "url": "https://ekelting.github.io/UNE-BlueSonde-BB1.48/",
       "lat": 43.396733,
       "lon": -70.402301

@@ -44,6 +44,37 @@ def fetch_tides():
         return []
 
 
+def export_latest(S, SS, path, days=14):
+    """Small JSON the UNE Marine Monitoring Network overview page reads: latest values + last 2 weeks hourly."""
+    import json
+    import numpy as np
+    num = lambda v: None if v is None or not np.isfinite(float(v)) else round(float(v), 3)
+    st, lt, H = S['stats'], S['stats']['latest'], S['hourly']
+    t0 = H.index.max() - pd.Timedelta(days=days)
+    H = H[H.index > t0]
+    now = dict(hs_m=num(lt['hs']), tp_s=num(lt['tp']), wave_dir=lt['dir'], wave_dir_deg=num(lt['dm']),
+               wind_ms=num(lt.get('wspd')), wind_dir_deg=num(lt.get('wdir')), pres_hpa=num(lt['pres']))
+    rec = {'t': [t.strftime('%Y-%m-%dT%H:%MZ') for t in H.index], 'hs_m': [num(v) for v in H['hs'].values]}
+    if SS and SS.get('has'):
+        SH = SS['hourly']
+        for grp, key, k in [('temp', 'water_temp_c', 1.0), ('do_conc', 'do_mgl', None), ('do_sat', 'do_pct', 1.0)]:
+            ser = [x for x in SS['series'] if x['group'] == grp]
+            if not ser:
+                continue
+            s0 = ser[0]
+            kk = k if k is not None else (sn.UMOL_TO_MGL if 'mol' in s0['units'].lower() else 1.0)
+            now[key] = num(s0['latest'] * kk)
+            col = SH[s0['col']].reindex(H.index) * kk
+            rec[key] = [num(v) for v in col.values]
+    js = dict(id=bc.GITHUB_REPO, kind='wave', name=bc.SITE_SHORT, device=st['spotter'], model='Sofar Spotter',
+              lat=bc.CFG.get('mooring_lat'), lon=bc.CFG.get('mooring_lon'), url=bc.SITE_URL,
+              last_obs=pd.Timestamp(lt['time']).tz_convert('UTC').strftime('%Y-%m-%dT%H:%M:%SZ'),
+              generated=pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%dT%H:%M:%SZ'),
+              now=now, recent=rec, insights=[[e, h] for e, h, _ in bc.insights(S)][:4])
+    with open(path, 'w') as fh:
+        json.dump(js, fh, ensure_ascii=False, separators=(',', ':'))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default=os.path.join(ROOT, 'data'))
@@ -101,6 +132,7 @@ def main():
                      plotly_js=plotly.offline.get_plotlyjs() if a.inline_plotly else None,
                      plotly_src=None if a.inline_plotly else f'https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{ver}/plotly.min.js',
                      SS=SS, mode='web', downloads=downloads, notice=notice, tides=tides)
+    export_latest(S, SS, os.path.join(a.out, 'data', 'latest.json'))
     open(os.path.join(a.out, '.nojekyll'), 'w').close()
     st = S['stats']
     print(f"✅ site built in {time.time() - t0:.0f}s — waves {st['first']:%b %d, %Y} → {st['last']:%b %d %Y %H:%M}, "
