@@ -76,7 +76,7 @@ function renderMap(){
       .bindTooltip(esc(me.label), {permanent:true, direction:'top', className:'blabel me'})
       .bindPopup(`<b>${esc(me.label)}</b><br>${esc(me.sub||'')}`);
     const pts = [[me.lat, me.lon]].concat((MAPDATA.others||[]).map(o=>[o.lat, o.lon])).concat(MAPDATA.track||[]);
-    if (pts.length > 1) LMAP.fitBounds(pts, {padding:[40, 60], maxZoom:14});
+    if (pts.length > 1) LMAP.fitBounds(pts, {padding:[40, 60], maxZoom:15});
   }
   const key = mapMode + '|' + (mapMode==='chart' ? unitKey() : (mapIsDark()?'dark':'light'));
   if (key !== LBASE_KEY){
@@ -87,8 +87,11 @@ function renderMap(){
         display_params: JSON.stringify({ECDISParameters:{DynamicParameters:{Parameter:[{name:'DisplayDepthUnits',value: unitKey()==='metric'?1:2}]}}}),
         attribution:'NOAA Office of Coast Survey — not for navigation'});
     } else {
-      LBASE = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${mapIsDark()?'dark_all':'light_all'}/{z}/{x}/{y}{r}.png`, {
-        subdomains:'abcd', maxZoom:19, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+      LBASE = (mapIsDark()
+        ? L.layerGroup([L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:16, attribution:'Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}),
+                        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom:16})])
+        : L.layerGroup([L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:16, attribution:'Esri, GEBCO, NOAA, Garmin, HERE, &copy; OpenStreetMap contributors'}),
+                        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom:16})]));
     }
     LBASE.addTo(LMAP); LBASE_KEY = key;
   }
