@@ -20,5 +20,7 @@
       "lat": 43.43761,
       "lon": -70.34923
     }
-  ]
+  ],
+  "tide_station": "8418606",
+  "tide_station_name": "Camp Ellis, Saco River entrance"
 }

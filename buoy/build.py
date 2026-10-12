@@ -24,6 +24,26 @@ import sensors as sn  # noqa: E402
 ROOT = os.path.dirname(HERE)
 
 
+def fetch_tides():
+    """NOAA high/low tide predictions (yesterday → +3 days, local time, feet above MLLW). Empty list if NOAA is unreachable."""
+    import json
+    import urllib.request
+    st = bc.CFG.get('tide_station')
+    if not st:
+        return []
+    d0 = (pd.Timestamp.now(tz=bc.LOCAL_TZ) - pd.Timedelta(days=1)).strftime('%Y%m%d')
+    url = ('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=UNE_buoy'
+           f'&begin_date={d0}&range=120&datum=MLLW&station={st}&time_zone=lst_ldt&units=english&interval=hilo&format=json')
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            pr = json.load(r).get('predictions') or []
+        print(f'🌙 {len(pr)} tide highs/lows from NOAA station {st}')
+        return [{'t': x['t'], 'v': round(float(x['v']), 2), 'type': x['type']} for x in pr]
+    except Exception as e:  # noqa: BLE001 — tides are a nice-to-have; never break the build
+        print(f'::warning::Could not get tide predictions from NOAA ({e}); the page will try again in the browser.')
+        return []
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default=os.path.join(ROOT, 'data'))
@@ -73,13 +93,14 @@ def main():
                       + ' · '.join(errs[:3]))
     except (OSError, ValueError):
         pass
+    tides = fetch_tides()
     import plotly
     import plotly.offline
     ver = plotly.offline.get_plotlyjs_version()
     mdash.build_html(S, bd, os.path.join(a.out, 'index.html'),
                      plotly_js=plotly.offline.get_plotlyjs() if a.inline_plotly else None,
                      plotly_src=None if a.inline_plotly else f'https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{ver}/plotly.min.js',
-                     SS=SS, mode='web', downloads=downloads, notice=notice)
+                     SS=SS, mode='web', downloads=downloads, notice=notice, tides=tides)
     open(os.path.join(a.out, '.nojekyll'), 'w').close()
     st = S['stats']
     print(f"✅ site built in {time.time() - t0:.0f}s — waves {st['first']:%b %d, %Y} → {st['last']:%b %d %Y %H:%M}, "

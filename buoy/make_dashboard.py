@@ -329,7 +329,7 @@ def build_sensor_figs(SS):
     return figs, block, tiles
 
 
-def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=None, downloads=None, notice=''):
+def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=None, downloads=None, notice='', tides=None):
     st, ev, lt = S['stats'], S['storms'], S['stats']['latest']
     figs = build_figs(S, bd)
     sfigs, sensor_block, stiles = build_sensor_figs(SS)
@@ -420,6 +420,14 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
                                   if depth else 'not recorded yet'),
                 ('🚀 In the water since', f'{pd.Timestamp(bc.CFG.get("deployed_utc", st["first"])).tz_convert(bc.LOCAL_TZ):%B %d, %Y}')]
         where = ''.join(f'<div class="kv"><span>{k}</span><b>{v}</b></div>' for k, v in rows)
+    tide_st = str(bc.CFG.get('tide_station') or '')
+    if tide_st:
+        where += (f'<div class="tidebox"><h3>🌙 Tides today &amp; tomorrow</h3>'
+                  f'<div class="tide-next" id="tide-next"></div>'
+                  f'<div id="tide" class="tidechart"></div>'
+                  f'<p class="t-sub" style="margin:4px 0 0">Predicted by NOAA for {esc(bc.CFG.get("tide_station_name") or tide_st)} '
+                  f'(<a href="https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id={esc(tide_st)}">station {esc(tide_st)}</a>). '
+                  'Heights are above average low tide (MLLW). Real water levels can differ in storms.</p></div>')
     hh = bd.met['humid'].dropna()
     health_note = ''
     if len(hh):
@@ -448,7 +456,8 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
     page = TEMPLATE
     for k, v in {
         '%%PLOTLY_TAG%%': plotly_tag, '%%FIGS%%': fig_json, '%%SENSORS%%': sensor_block, '%%HOWTO%%': howto,
-        '%%DOWNLOADS%%': dl, '%%WHERE%%': where, '%%HEALTH_NOTE%%': health_note, '%%SISTERS%%': sisters,
+        '%%DOWNLOADS%%': dl, '%%TIDES%%': json.dumps(tides or []), '%%TIDE_ST%%': json.dumps(str(bc.CFG.get('tide_station') or '')),
+        '%%TZ%%': json.dumps(str(bc.LOCAL_TZ)), '%%WHERE%%': where, '%%HEALTH_NOTE%%': health_note, '%%SISTERS%%': sisters,
         '%%FOOTSRC%%': (f'from <a href="{bc.REPO_URL}">{bc.GITHUB_USER}/{bc.GITHUB_REPO}</a> on GitHub' if mode == 'web'
                         else 'by <code>buoy_tools/update_buoy_report.py</code>'), '%%NOW_TILES%%': now_tiles, '%%SEASON_TILES%%': season_tiles,
         '%%CARDS%%': cards, '%%STORM_ROWS%%': srows, '%%STORM_BTN%%': storm_btn, '%%STORM_LEDE%%': storm_lede, '%%QC%%': qc, '%%STALE%%': stale_banner,
@@ -493,7 +502,7 @@ a.btn{text-decoration:none;display:inline-block}
 .seg{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;font:inherit;font-size:13px}
 .seg[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
-.kv:last-child{border-bottom:0}.kv span{color:var(--ink2)}.kv b{text-align:right}
+.kv:last-child{border-bottom:0}.wherecard{display:flex;flex-direction:column}.mapcard{display:flex;flex-direction:column}.mapcard #map{flex:1}.tidebox{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);flex:1;display:flex;flex-direction:column}.tidebox h3{margin:0 0 6px;font-size:15px}.tidechart{min-height:250px}.tide-next{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;color:var(--ink2)}.tide-next b{color:var(--ink)}.kv span{color:var(--ink2)}.kv b{text-align:right}
 .btn[aria-pressed="true"]{background:#fff;color:#0d366b;font-weight:600}
 section{margin-top:28px}
 h2{font-size:22px;margin:0 0 4px}
@@ -559,11 +568,11 @@ code{background:var(--chip);padding:1px 5px;border-radius:5px}
   </section>
 
   <section><h2>📍 Where is the buoy?</h2><p class="lede">Updates every hour. The orange dot is the buoy's latest position; the line is where it has drifted around its anchor over the last week.</p>
-    <div class="grid two"><div class="card" style="padding:0;overflow:hidden">
+    <div class="grid two"><div class="card mapcard" style="padding:0;overflow:hidden">
       <div class="maptools"><button class="seg" data-map="street" aria-pressed="true">🗺️ Street map</button><button class="seg" data-map="chart" aria-pressed="false">⚓ Nautical chart (depths &amp; contours)</button></div>
       <div id="map" class="chart" style="min-height:380px"></div>
       <p class="t-sub" style="margin:6px 12px 10px">Nautical chart: NOAA Office of Coast Survey — depths at low tide, in the units you pick at the top. Not for navigation.</p></div>
-    <div class="card">%%WHERE%%</div></div></section>
+    <div class="card wherecard">%%WHERE%%</div></div></section>
 
   <section><h2>📊 The season so far</h2><p class="lede">Big-picture numbers since the buoy went in the water.</p>
     <div class="grid tiles">%%SEASON_TILES%%</div></section>
@@ -652,6 +661,57 @@ function themed(layout){
   if (L.xaxis && L.xaxis.rangeselector) L.xaxis.rangeselector=Object.assign({bgcolor:css('--chip'),activecolor:css('--chip2'),font:{color:ink}},L.xaxis.rangeselector);
   return L;
 }
+
+// ---------- tide chart (NOAA high/low predictions, smooth cosine curve between them) ----------
+let TIDES = %%TIDES%%;                      // [{t:'YYYY-MM-DD HH:MM' local, v: ft, type:'H'|'L'}]
+const TIDE_ST = %%TIDE_ST%%, SITE_TZ = %%TZ%%;
+const tms = s => Date.parse(s.replace(' ','T')+':00Z');          // treat site-local clock times as plain numbers
+const tstr = ms => new Date(ms).toISOString().slice(0,16).replace('T',' ');
+function siteNow(){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:SITE_TZ,year:'numeric',month:'2-digit',day:'2-digit',
+  hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()); const g=k=>p.find(x=>x.type===k).value;
+  return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}`; }
+function clock(s){ const [h,m]=s.slice(11,16).split(':').map(Number); return `${(h%12)||12}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`; }
+function fmtH(ft){ return unit==='ft'? ft.toFixed(1)+' ft' : (ft/M2FT).toFixed(2)+' m'; }
+function renderTide(){
+  const el=document.getElementById('tide'); if(!el || !TIDES.length) return;
+  const now=siteNow(), nowMs=tms(now), day0=tms(now.slice(0,10)+' 00:00'), end=day0+48*3600e3;
+  const ev=TIDES.map(e=>({ms:tms(e.t), t:e.t, v:+e.v, type:e.type})).sort((a,b)=>a.ms-b.ms);
+  const k = unit==='ft'? 1 : 1/M2FT, xs=[], ys=[];
+  for (let i=0;i<ev.length-1;i++){ const a=ev[i], b=ev[i+1];
+    for (let ms=Math.max(a.ms,day0-3600e3); ms<b.ms && ms<=end+3600e3; ms+=10*60e3){
+      const f=(ms-a.ms)/(b.ms-a.ms); xs.push(tstr(ms)); ys.push((a.v+(b.v-a.v)*(1-Math.cos(Math.PI*f))/2)*k); } }
+  const vis=ev.filter(e=>e.ms>=day0 && e.ms<=end), ink=css('--ink2'), acc=css('--accent'), narrow=el.clientWidth<480;
+  let cur=null; for (let i=0;i<ev.length-1;i++) if (ev[i].ms<=nowMs && nowMs<ev[i+1].ms){ const a=ev[i],b=ev[i+1],f=(nowMs-a.ms)/(b.ms-a.ms);
+    cur={v:a.v+(b.v-a.v)*(1-Math.cos(Math.PI*f))/2, rising:b.type==='H', next:b}; }
+  const data=[
+    {x:xs,y:ys,type:'scatter',mode:'lines',line:{color:acc,width:2.5,shape:'spline'},fill:'tozeroy',fillcolor:'rgba(28,92,171,0.13)',
+     hovertemplate:'%{x|%a %I:%M %p}<br>%{y:.1f} '+unit+'<extra></extra>',name:'tide'},
+    {x:vis.map(e=>e.t),y:vis.map(e=>e.v*k),type:'scatter',mode:'markers+text',marker:{size:7,color:acc},
+     text:vis.map(e=>(narrow?'':(e.type==='H'?'High ':'Low '))+clock(e.t)),textposition:vis.map(e=>(e.type==='H'?'top ':'bottom ')+(e.ms-day0<3*3600e3?'right':end-e.ms<3*3600e3?'left':'center')),
+     cliponaxis:false,textfont:{size:11,color:ink},hovertemplate:vis.map(e=>(e.type==='H'?'High tide':'Low tide')+'<br>%{x|%a %I:%M %p}<br>'+fmtH(e.v)+'<extra></extra>'),name:'hi/lo'}];
+  if (cur) data.push({x:[now],y:[cur.v*k],type:'scatter',mode:'markers',marker:{size:12,color:'#f28f16',line:{color:'#fff',width:2}},
+     hovertemplate:'Now: '+fmtH(cur.v)+(cur.rising?' and rising':' and falling')+'<extra></extra>',name:'now'});
+  const lo=Math.min(...ys), hi=Math.max(...ys), pad=(hi-lo)*0.28;
+  const L=themed({showlegend:false,height:250,margin:{l:46,r:14,t:22,b:30},
+    xaxis:{type:'date',range:[tstr(day0-40*60e3),tstr(end+40*60e3)],tickformat:'%-I %p',dtick:(narrow?12:6)*3600e3,tickangle:0},
+    yaxis:{title:'Tide ('+unit+')',range:[lo-pad,hi+pad],zeroline:true},
+    shapes:[{type:'line',x0:now,x1:now,y0:0,y1:1,yref:'paper',line:{color:'#f28f16',width:1.5,dash:'dot'}},
+            {type:'line',x0:tstr(day0+24*3600e3),x1:tstr(day0+24*3600e3),y0:0,y1:1,yref:'paper',line:{color:css('--grid'),width:1}}],
+    annotations:[{x:tstr(day0+12*3600e3),y:1.0,yref:'paper',yanchor:'bottom',text:'<b>Today</b>',showarrow:false,font:{size:12,color:ink}},
+                 {x:tstr(day0+36*3600e3),y:1.0,yref:'paper',yanchor:'bottom',text:'<b>Tomorrow</b>',showarrow:false,font:{size:12,color:ink}}]});
+  try{ Plotly.react(el,data,L,{responsive:true,displaylogo:false,displayModeBar:false}); }catch(e){ console.error('tide',e); }
+  const nx=document.getElementById('tide-next');
+  if (nx){ const up=ev.filter(e=>e.ms>nowMs).slice(0,2);
+    nx.innerHTML=(cur? `<span>Now: <b>${fmtH(cur.v)}</b> ${cur.rising?'⬆️ rising':'⬇️ falling'}</span>`:'')+
+      up.map(e=>`<span>Next ${e.type==='H'?'high':'low'}: <b>${clock(e.t)}</b> (${fmtH(e.v)})</span>`).join(''); }
+}
+async function refreshTides(){   // page left open for a while? fetch fresh predictions straight from NOAA
+  if (!TIDE_ST) return; const now=siteNow(), last=TIDES.length? tms(TIDES[TIDES.length-1].t):0;
+  if (last > tms(now)+36*3600e3) return;
+  const d=new Date(tms(now)-86400e3).toISOString().slice(0,10).replaceAll('-','');
+  try{ const r=await fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&application=UNE_buoy&begin_date=${d}&range=96&datum=MLLW&station=${TIDE_ST}&time_zone=lst_ldt&units=english&interval=hilo&format=json`);
+    const j=await r.json(); if (j.predictions && j.predictions.length){ TIDES=j.predictions; renderTide(); } }catch(e){ console.warn('tides',e); }
+}
 function render(){
   const k = unit==='ft'? M2FT:1;
   let chartLayers = [];
@@ -670,6 +730,7 @@ function render(){
       chartLayers=[{sourcetype:'raster', below:'traces', sourceattribution:'NOAA Office of Coast Survey — not for navigation',
         source:['https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer?service=WMS&request=GetMap&version=1.3.0&layers=0,1,2,3,4,5,6,7&styles=&format=image/png&transparent=false&crs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}&display_params='+dp]}];
     }
+    if (L.map) L.height = Math.max(380, el.clientHeight || 0);
     if (L.polar && el.clientWidth < 560) {      // narrow screens: legend underneath the rose
       L.height=640; L.polar.domain={x:[0,1],y:[0.42,1]};
       L.legend=Object.assign({},L.legend,{orientation:'v',x:0,y:0,xanchor:'left',yanchor:'bottom'}); }
@@ -684,6 +745,7 @@ function render(){
   document.querySelectorAll('.len').forEach(el=>{const m=parseFloat(el.dataset.m); if(isNaN(m))return;
     const v = unit==='ft'? m*M2FT : m; const lt = el.dataset.lt? '<':'';
     el.textContent = lt + (unit==='ft'? v.toFixed(el.dataset.lt?0:1)+' ft' : v.toFixed(el.dataset.lt?1:2)+' m');});
+  renderTide();
   document.getElementById('u-ft').setAttribute('aria-pressed', unit==='ft');
   document.getElementById('u-m').setAttribute('aria-pressed', unit==='m');
 }
@@ -704,6 +766,7 @@ let mapMode='street';
 try{ mapMode = localStorage.getItem('buoy-map') || 'street'; }catch(e){}
 document.querySelectorAll('[data-map]').forEach(b=>b.onclick=()=>{mapMode=b.dataset.map; try{localStorage.setItem('buoy-map',mapMode)}catch(e){} render();});
 render();
+refreshTides(); setInterval(()=>{refreshTides(); renderTide();}, 10*60e3);
 </script>
 </body></html>
 """

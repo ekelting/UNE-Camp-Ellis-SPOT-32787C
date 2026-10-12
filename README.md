@@ -11,6 +11,7 @@ The dashboard shows:
 - **Waves:** height, period (rhythm), direction, storm events, the seasonal pattern, and the full wave spectrum
 - **Weather at the buoy:** barometric pressure
 - **Below the surface (Smart Mooring sensors):** water temperature at three depths, dissolved oxygen (concentration and % saturation), and current speed and direction
+- **Where is the buoy:** a live map (street map or NOAA nautical chart) and a tide chart for today and tomorrow, with NOAA predictions for station 8418606, Camp Ellis, Saco River entrance
 - **Buoy health:** battery and hull humidity
 
 ## Using the data
