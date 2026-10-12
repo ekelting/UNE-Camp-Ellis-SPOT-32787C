@@ -448,7 +448,7 @@ def build_html(S, bd, path, plotly_js=None, SS=None, mode='local', plotly_src=No
             span = '; '.join(f'{a:%b %d} – {b:%b %d, %Y}' for a, b in gaps)
             health_note = (' <i>Battery and humidity history only comes in the buoy\'s monthly data files, so there is no record for '
                            f'{span}. New readings are logged every hour.</i>')
-    sisters = ''.join(f'<a class="btn" href="{esc(x["url"])}">{"🌊" if mapjs.kind_of(x) == "wave" else "🧪"} {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
+    sisters = '<a class="btn" href="https://ekelting.github.io/UNE-Marine-Monitoring-Network/">🗺️ All UNE buoys</a>' + ''.join(f'<a class="btn" href="{esc(x["url"])}">{"🌊" if mapjs.kind_of(x) == "wave" else "🧪"} {esc(x["label"])} →</a>' for x in bc.SISTER_SITES)
     if plotly_src:
         plotly_tag = f'<script src="{plotly_src}"></script>'
     else:
